@@ -56,6 +56,6 @@ The interface, source comments, issues, PR templates, and primary documentation
 use English. Brazilian Portuguese documentation will be added after publication.
 Do not introduce partial translations into the primary documents.
 
-See [architecture](docs/architecture.md), [releasing](docs/releasing.md),
-[testing](docs/testing.md), [repository setup](docs/github-setup.md), and
+See [architecture](../docs/architecture.md), [releasing](../docs/releasing.md),
+[testing](../docs/testing.md), [repository setup](../docs/github-setup.md), and
 [security policy](SECURITY.md).

@@ -3,7 +3,7 @@
 XSwap is a Go terminal account manager. The first provider is Codex; Claude is
 future scope. Keep the interface, comments, and primary documentation in English.
 
-Read `CONTRIBUTING.md` and `docs/architecture.md` before changing behavior.
+Read `.github/CONTRIBUTING.md` and `docs/architecture.md` before changing behavior.
 Run `make check` for Go changes. Keep the Go runtime free of third-party
 dependencies unless a concrete need is agreed with maintainers.
 

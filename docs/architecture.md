@@ -3,7 +3,11 @@
 XSwap is a Go executable with no third-party runtime libraries. It targets
 macOS and Linux and uses POSIX terminal control and advisory file locks.
 
-| File | Responsibility |
+Source files and their tests live together in `cmd/xswap/`. The root contains
+build configuration and the project entry documents; community policies live
+in `.github/` and longer guides in `docs/`.
+
+| File in `cmd/xswap/` | Responsibility |
 | --- | --- |
 | `main.go` | CLI commands, installation, and wrapper restoration |
 | `storage.go` | Profiles, config, private atomic writes, and file locks |
