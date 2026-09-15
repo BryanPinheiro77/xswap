@@ -71,6 +71,7 @@ func (a *App) dashboard(mode, filter string, interval int) error {
 			return err
 		}
 		if action == "update" {
+			fmt.Println("Checking for updates…")
 			installed, updateErr := a.updateCommand(Options{})
 			if updateErr != nil {
 				fmt.Println("Update failed:", updateErr)
@@ -281,6 +282,9 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 		return renderRows(rows, p.Width)
 	}
 	heading := map[string]string{"home": "xswap", "watch": "watching all accounts", "auto": "auto-switch view", "switch": "select account", "disable": "disable / enable account", "remove": "remove account", "confirm": "confirm removal"}[p.Mode]
+	if p.Mode == "home" {
+		heading += " " + clean(version)
+	}
 	if p.Filter != "" && p.Mode == "watch" {
 		heading = "watching " + p.Filter
 	}
@@ -703,7 +707,7 @@ func (a *App) panel(mode, filter string, interval int) (string, error) {
 			if err != nil {
 				p.Message = err.Error()
 			}
-			if action == "quit" || action == "add" {
+			if action == "quit" || action == "add" || action == "update" {
 				return action, nil
 			}
 			if action == "refresh" {

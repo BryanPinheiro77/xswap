@@ -5,6 +5,20 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ## Unreleased
 
+## v0.1.1 — 2026-09-15
+
+### Fixed
+
+- Forward the Update version action from the terminal panel to the confirmed
+  updater instead of silently ignoring the selection.
+- Show a checking-for-updates message before fetching release metadata.
+- Display the running version in the home panel so the installed build is visible.
+
+### Added
+
+- A real terminal integration regression test for update selection and terminal
+  restoration, using isolated state and simulated quota/release responses.
+
 ## v0.1.0 — 2026-09-15
 
 - Check stable GitHub releases in the background and show Update version only
