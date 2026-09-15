@@ -6,13 +6,13 @@ LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.bui
 
 .PHONY: build install fmt check-fmt test vet check release clean
 build:
-	go build -trimpath -ldflags '$(LDFLAGS)' -o bin/xswap .
+	go build -trimpath -ldflags '$(LDFLAGS)' -o bin/xswap ./cmd/xswap
 install: build
 	./bin/xswap install
 fmt:
-	gofmt -w *.go
+	gofmt -w cmd/xswap/*.go
 check-fmt:
-	@test -z "$$(gofmt -l *.go)" || (gofmt -l *.go; exit 1)
+	@test -z "$$(gofmt -l cmd/xswap/*.go)" || (gofmt -l cmd/xswap/*.go; exit 1)
 test:
 	go test -race ./...
 vet:

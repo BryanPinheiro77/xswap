@@ -9,6 +9,11 @@ tags; unreleased work stays in this section until a release is prepared.
   when a newer version is available.
 - Add confirmed, checksum-validated atomic updates for macOS and Linux.
 
+### Changed
+
+- Group Go source and tests under `cmd/xswap/` and community documents under
+  `.github/`, keeping the repository root focused on project and build files.
+
 ### Added
 
 - Go executable with an English terminal menu and thin quota bars.

@@ -60,4 +60,4 @@ jobs:
       - name: Behavioral tests and race detection
         run: go test -race ./...
       - name: Build
-        run: go build -trimpath -o bin/xswap .
+        run: go build -trimpath -o bin/xswap ./cmd/xswap

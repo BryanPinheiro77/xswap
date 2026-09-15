@@ -55,7 +55,7 @@ branches. It fails on other targets; server enforcement on additional branches
 requires the owner to extend protection rules to those branches.
 
 Add maintainer handles to `.github/CODEOWNERS` after publication.
-Publish a private conduct-reporting contact in `CODE_OF_CONDUCT.md` before
+Publish a private conduct-reporting contact in `.github/CODE_OF_CONDUCT.md` before
 inviting community participation.
 Enable required code-owner reviews once it is accurate. Turn on dependency alerts and secret
 scanning where available. Fork PRs use hosted runners, `pull_request`, read-only

@@ -20,7 +20,7 @@ for platform in darwin/arm64 darwin/amd64 linux/arm64 linux/amd64; do
   mkdir -p "$staging/$name"
   CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" go build -trimpath \
     -ldflags "-s -w -X main.version=$VERSION -X main.commit=$COMMIT -X main.buildDate=$BUILD_DATE -X main.releaseRepo=$REPOSITORY" \
-    -o "$staging/$name/xswap" .
+    -o "$staging/$name/xswap" ./cmd/xswap
   cp README.md LICENSE "$staging/$name/"
   tar -czf "dist/$name.tar.gz" -C "$staging/$name" xswap README.md LICENSE
 done

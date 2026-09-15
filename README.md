@@ -117,9 +117,9 @@ Tests use temporary homes and a fake app server, not real credentials.
 
 - [Usage](docs/usage.md)
 - [Architecture](docs/architecture.md)
-- [Contributing](CONTRIBUTING.md)
-- [Security policy](SECURITY.md)
-- [Code of conduct](CODE_OF_CONDUCT.md)
+- [Contributing](.github/CONTRIBUTING.md)
+- [Security policy](.github/SECURITY.md)
+- [Code of conduct](.github/CODE_OF_CONDUCT.md)
 - [Changelog](CHANGELOG.md)
 - [Release process](docs/releasing.md)
 - [GitHub setup and branch protections](docs/github-setup.md)
