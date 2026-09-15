@@ -24,6 +24,11 @@ call GitHub, or update the contributor's installed executable.
 
 ## Limits and release validation
 
+The terminal integration test uses the standard `script` utility to open a
+pseudo-terminal on macOS/Linux. It selects Update version with real keyboard
+input and checks that the panel returns the action and restores the terminal.
+It uses simulated release metadata and never installs an update.
+
 Automated tests do not exercise an actual browser OAuth login or every terminal
 size and key sequence. Cross-compilation checks build compatibility; it is not
 the same as running the application on every supported operating system.
