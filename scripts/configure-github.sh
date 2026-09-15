@@ -38,4 +38,11 @@ gh label create bug --repo "$repo" --color d73a4a --description 'A reproducible 
 gh label create enhancement --repo "$repo" --color a2eeef --description 'A focused feature proposal' --force
 gh label create documentation --repo "$repo" --color 0075ca --description 'Documentation improvements' --force
 gh label create skip-changelog --repo "$repo" --color e4e669 --description 'Exclude from generated release notes' --force
+gh label create release --repo "$repo" --color 5319e7 --description 'Release preparation and distribution' --force
+gh label create roadmap --repo "$repo" --color 0e8a16 --description 'Planned work outside the current release' --force
+gh label create area:ci --repo "$repo" --color 1d76db --description 'CI and repository automation' --force
+gh label create area:testing --repo "$repo" --color 1d76db --description 'Behavioral and platform validation' --force
+gh label create area:security --repo "$repo" --color b60205 --description 'Security policy and hardening; report vulnerabilities privately' --force
+gh label create platform:windows --repo "$repo" --color 0366d6 --description 'Future Windows support' --force
+gh label create provider:claude --repo "$repo" --color d876e3 --description 'Future Claude provider support' --force
 echo "Repository settings and rulesets applied to $repo."

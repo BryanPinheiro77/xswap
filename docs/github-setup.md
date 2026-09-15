@@ -4,6 +4,12 @@ These files prepare repository policy. **Committing them does not enable server
 protections.** Apply the rules after creating the repository and running CI once.
 See GitHub's [ruleset documentation](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/creating-rulesets-for-a-repository).
 
+The initial XSwap repository uses the solo-maintainer configuration. PRs and
+all three required checks remain mandatory; approving reviews are optional.
+Change to the default one-review configuration when another maintainer joins.
+The setup script also maintains release, roadmap, CI, testing, security, Windows,
+and Claude labels in addition to the release-note category labels.
+
 ## Publish the initial repository
 
 Review `git status` and `git log --oneline` before publishing. Build outputs, manager state, auth files,
@@ -55,8 +61,8 @@ branches. It fails on other targets; server enforcement on additional branches
 requires the owner to extend protection rules to those branches.
 
 Add maintainer handles to `.github/CODEOWNERS` after publication.
-Publish a private conduct-reporting contact in `.github/CODE_OF_CONDUCT.md` before
-inviting community participation.
+The maintainer-approved private conduct-reporting contact is published in
+`.github/CODE_OF_CONDUCT.md`; keep it current when responsibility changes.
 Enable required code-owner reviews once it is accurate. Turn on dependency alerts and secret
 scanning where available. Fork PRs use hosted runners, `pull_request`, read-only
 permissions, and no personal Codex credentials.

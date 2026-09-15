@@ -15,9 +15,9 @@ Maintainers may edit or remove harmful content, close discussions, or restrict
 participation. They should explain moderation decisions when doing so does not
 expose private information or increase harm.
 
-To report a problem, request a private maintainer contact without publishing
-personal details. Once available, use the repository's private contact channel.
-Do not include sensitive incident details in a public issue.
+Report conduct incidents privately to [bryan.pinheiro77@hotmail.com](mailto:bryan.pinheiro77@hotmail.com).
+Include enough context for the maintainer to assess the report. Do not include
+sensitive incident details in a public issue.
 
 Maintainers should acknowledge reports, review relevant evidence, and give the
 people involved a fair opportunity to respond. Possible actions include a
@@ -27,5 +27,4 @@ review to another maintainer when possible.
 
 This policy applies to repository issues, pull requests, discussions, and other
 official project spaces. It also applies when someone represents the project
-in public. Maintainers must publish a private reporting contact when setting up
-the public repository.
+in public. Reports will be handled by the project maintainer.
