@@ -6,7 +6,7 @@ printf '%s\n' "$VERSION" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9
 COMMIT=${COMMIT:-unknown}
 REPOSITORY=${REPOSITORY:-}
 if [ -n "$REPOSITORY" ]; then
-  printf '%s\n' "$REPOSITORY" | grep -Eq '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$'
+  printf '%s\n' "$REPOSITORY" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9_.-]*[A-Za-z0-9_][A-Za-z0-9_.-]*$'
 fi
 BUILD_DATE=${BUILD_DATE:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}
 staging=$(mktemp -d)

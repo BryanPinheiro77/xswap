@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -155,6 +156,9 @@ func TestReleaseInstallChecksumsAndAtomicReplacement(t *testing.T) {
 	corrupt := true
 	a.HTTPClient = &http.Client{Transport: fakeTransport(func(r *http.Request) (*http.Response, error) {
 		data := archive
+		if r.URL.Host == "api.github.com" {
+			data, _ = json.Marshal(release)
+		}
 		if strings.HasSuffix(r.URL.Path, "checksums.txt") {
 			sum := sha256.Sum256(archive)
 			if corrupt {
@@ -183,8 +187,69 @@ func TestReleaseInstallChecksumsAndAtomicReplacement(t *testing.T) {
 	if string(backup) != "old" {
 		t.Fatal("missing backup")
 	}
+	installedOK, err := a.updateCommand(Options{Flags: map[string]bool{"yes": true}})
+	if err != nil || !installedOK {
+		t.Fatal("confirmed command failed", installedOK, err)
+	}
 	release.Assets[0].URL = "https://example.com/evil"
 	if _, err := assetURL(release, "owner/xswap", name); err == nil {
 		t.Fatal("accepted foreign asset")
+	}
+}
+
+func TestUpdateCommandChecksWithoutInstalling(t *testing.T) {
+	a := fixture(t)
+	t.Setenv("TERM", "dumb")
+	calls := 0
+	a.HTTPClient = &http.Client{Transport: fakeTransport(func(*http.Request) (*http.Response, error) {
+		calls++
+		return &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"tag_name":"v999.0.0"}`))}, nil
+	})}
+	if installed, err := a.updateCommand(Options{Flags: map[string]bool{"check": true}, Values: map[string]string{"repo": "owner/xswap"}}); err != nil || installed {
+		t.Fatal(installed, err)
+	}
+	if calls != 1 || a.repository() != "owner/xswap" {
+		t.Fatal("check downloaded assets or lost repository")
+	}
+	if installed, err := a.updateCommand(Options{}); err == nil || installed {
+		t.Fatal("unconfirmed noninteractive install", installed, err)
+	}
+	if _, err := a.updateCommand(Options{Values: map[string]string{"repo": "../invalid"}}); err == nil {
+		t.Fatal("accepted invalid repository")
+	}
+	if a.repository() != "owner/xswap" {
+		t.Fatal("invalid option changed repository")
+	}
+}
+
+func TestDownloadLimitsAndInvalidExecutables(t *testing.T) {
+	a := fixture(t)
+	a.HTTPClient = &http.Client{Transport: fakeTransport(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(strings.NewReader("too much"))}, nil
+	})}
+	if _, err := a.download(context.Background(), "https://github.com/owner/xswap", 3); err == nil {
+		t.Fatal("accepted oversized response")
+	}
+	if validExecutable([]byte("not executable")) {
+		t.Fatal("accepted invalid executable")
+	}
+	if _, err := unpackExecutable([]byte("not gzip")); err == nil {
+		t.Fatal("accepted invalid gzip")
+	}
+	var b bytes.Buffer
+	gz := gzip.NewWriter(&b)
+	tr := tar.NewWriter(gz)
+	for i := 0; i < 2; i++ {
+		if err := tr.WriteHeader(&tar.Header{Name: "xswap", Typeflag: tar.TypeReg, Size: 1}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tr.Write([]byte("x")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tr.Close()
+	gz.Close()
+	if _, err := unpackExecutable(b.Bytes()); err == nil {
+		t.Fatal("accepted duplicate executable")
 	}
 }

@@ -22,12 +22,12 @@ tags; unreleased work stays in this section until a release is prepared.
 - Contributor documentation, CI checks, draft release automation, and repository
   protection configuration.
 
-### Known limitations
-
 ### Fixed
 
 - Validate settings before archiving a profile, so corrupt settings leave the
   account registered and its files in place.
+- Reject repository paths containing invalid owner names or dot-only repository
+  names before changing updater configuration.
 
 ### Known limitations
 
