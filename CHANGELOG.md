@@ -5,6 +5,8 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ## Unreleased
 
+## v0.1.0 — 2026-09-15
+
 - Check stable GitHub releases in the background and show Update version only
   when a newer version is available.
 - Add confirmed, checksum-validated atomic updates for macOS and Linux.

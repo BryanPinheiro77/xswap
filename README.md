@@ -37,8 +37,8 @@ The installer creates `xswap` and `codex-swap` links and adds a `codex` wrapper.
 The wrapper calls your original CLI with the selected home; it does not modify
 the Codex package. Your existing login stays available as `default`.
 
-After GitHub publication, release archives will be available for macOS/Linux on
-arm64/amd64. Extract the matching archive into a permanent directory and run
+[GitHub Releases](https://github.com/BryanPinheiro77/xswap/releases) provide
+macOS/Linux archives for arm64/amd64. Extract the matching archive into a permanent directory and run
 `./xswap install`. Keep the executable there after installation.
 
 ## Quick start
