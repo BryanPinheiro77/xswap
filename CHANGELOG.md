@@ -24,6 +24,13 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ### Known limitations
 
+### Fixed
+
+- Validate settings before archiving a profile, so corrupt settings leave the
+  account registered and its files in place.
+
+### Known limitations
+
 - Auto-switch applies to newly started Codex processes, not running sessions.
 - Only macOS and Linux are supported. Claude support is planned for the future.
 - macOS artifacts are not Apple-notarized; release checksums are not signed.

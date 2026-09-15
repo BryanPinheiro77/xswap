@@ -296,16 +296,16 @@ func (a *App) remove(name string) (string, error) {
 		if info.Mode()&os.ModeSymlink != 0 {
 			return errors.New("refusing to remove a symlink profile")
 		}
+		s, err := a.settings()
+		if err != nil {
+			return err
+		}
 		directory := filepath.Join(a.Root, "removed")
 		if err = os.MkdirAll(directory, 0700); err != nil {
 			return err
 		}
 		archive = filepath.Join(directory, fmt.Sprintf("%s-%d", name, time.Now().UnixNano()))
 		if err = os.Rename(home, archive); err != nil {
-			return err
-		}
-		s, err := a.settings()
-		if err != nil {
 			return err
 		}
 		next := []string{}
