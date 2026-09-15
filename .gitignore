@@ -1,0 +1,13 @@
+/bin/
+/dist/
+/coverage.out
+*.test
+.DS_Store
+__pycache__/
+*.pyc
+.env
+.env.*
+auth.json
+.codex/
+.codex-swap/
+.xswap/
