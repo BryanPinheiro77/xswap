@@ -1,0 +1,40 @@
+name: Bug report
+description: Report a reproducible problem
+title: '[Bug] '
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Do not include tokens, auth.json files, or private screenshots. Use private security reporting for vulnerabilities.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of xswap version
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Platform and Codex CLI version
+      placeholder: macOS arm64, codex-cli 0.x
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Use fake credentials and temporary profiles where possible.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized output
+      render: text
