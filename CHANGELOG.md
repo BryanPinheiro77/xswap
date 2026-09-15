@@ -12,6 +12,8 @@ tags; unreleased work stays in this section until a release is prepared.
 ### Added
 
 - Go executable with an English terminal menu and thin quota bars.
+- Behavioral coverage for isolated wrapper installation/restoration, simulated
+  login, storage failures, CLI management, incomplete quotas, and auto-view status.
 - Isolated Codex account login, manual selection, and parallel account runs.
 - Live quota watching through the official Codex app-server protocol.
 - Opt-in background auto-switch with a configurable threshold, five-minute
