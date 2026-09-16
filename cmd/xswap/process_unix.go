@@ -9,6 +9,10 @@ import (
 )
 
 func readStdin(buffer []byte) (int, error) { return syscall.Read(int(os.Stdin.Fd()), buffer) }
+func isRunnable(info os.FileInfo) bool     { return !info.IsDir() && info.Mode()&0111 != 0 }
+func replaceProcess(binary string, args, env []string) error {
+	return syscall.Exec(binary, append([]string{binary}, args...), env)
+}
 
 func configureProcess(cmd *exec.Cmd) { cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true} }
 func configureDaemon(cmd *exec.Cmd)  { cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true} }

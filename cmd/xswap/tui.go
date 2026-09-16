@@ -77,7 +77,7 @@ func (a *App) dashboard(mode, filter string, interval int) error {
 				fmt.Println("Update failed:", updateErr)
 			}
 			if installed {
-				return syscall.Exec(a.Binary, []string{a.Binary}, os.Environ())
+				return replaceProcess(a.Binary, nil, os.Environ())
 			}
 			fmt.Print("\nPress Enter to return to the menu.")
 			bufio.NewReader(os.Stdin).ReadString('\n')

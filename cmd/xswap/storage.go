@@ -123,6 +123,13 @@ func writeJSON(path string, v any) error {
 	}
 	return atomicWrite(path, append(data, '\n'))
 }
+func readJSON(path string, v any) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(data, v)
+}
 func (a *App) settings() (Settings, error) {
 	s := Settings{Disabled: []string{}, DisplayNames: map[string]string{}, Auto: AutoConfig{false, 90, 60, 300, 5}}
 	data, err := os.ReadFile(filepath.Join(a.Root, "settings.json"))
