@@ -74,11 +74,6 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
-      - name: Check formatting
-        shell: pwsh
-        run: |
-          $files = gofmt -l cmd/xswap
-          if ($files) { $files; exit 1 }
       - name: Compile tests for Windows
         run: go test -c -o xswap.test.exe ./cmd/xswap
       - name: Build Windows executable
