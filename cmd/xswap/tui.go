@@ -107,16 +107,16 @@ type panelUpdate struct {
 	Done   bool
 }
 type Panel struct {
-	Mode, Filter, Message, Pending    string
-	Cursor, MenuCursor, Offset, Theme int
-	Records                           map[string]Record
-	Busy                              bool
-	UpdateAvailable                   bool
-	Due                               time.Time
-	Width, Height                     int
+	Mode, Filter, Message, Pending, Input string
+	Cursor, MenuCursor, Offset, Theme     int
+	Records                               map[string]Record
+	Busy                                  bool
+	UpdateAvailable                       bool
+	Due                                   time.Time
+	Width, Height                         int
 }
 
-var menuItems = []string{"Switch account…", "Watch accounts", "Auto-switch view", "Add account…", "Disable / enable account…", "Remove account…", "Theme…", "Quit"}
+var menuItems = []string{"Switch account…", "Watch accounts", "Auto-switch view", "Add account…", "Rename account…", "Disable / enable account…", "Remove account…", "Theme…", "Quit"}
 
 func (p *Panel) menu() []string {
 	items := append([]string{}, menuItems[:6]...)
@@ -161,9 +161,19 @@ func (p *Panel) accountLines(a *App, names []string, s Settings, now time.Time) 
 		if email == "" {
 			email = name
 		}
-		title := bold + fmt.Sprintf("  %d  %s", index+1, email) + reset
+		label := email
+		if custom := strings.TrimSpace(s.DisplayNames[name]); custom != "" {
+			label = clean(custom)
+		}
+		title := bold + fmt.Sprintf("  %d  %s", index+1, label) + reset
 		if record.Account.Email != "" {
-			title += muted + fmt.Sprintf("  [%s · %s]", name, clean(record.Account.Plan)) + reset
+			meta := name
+			if label == name || label == email {
+				meta = name + " · " + clean(record.Account.Plan)
+			} else if record.Account.Plan != "" {
+				meta = name + " · " + clean(record.Account.Plan)
+			}
+			title += muted + "  [" + meta + "]" + reset
 		}
 		if name == active {
 			title += accent(p.Theme) + "   ● active" + reset
@@ -179,7 +189,7 @@ func (p *Panel) accountLines(a *App, names []string, s Settings, now time.Time) 
 				}
 			}
 		}
-		if (p.Mode == "switch" || p.Mode == "disable" || p.Mode == "remove") && index == p.Cursor {
+		if (p.Mode == "switch" || p.Mode == "rename" || p.Mode == "disable" || p.Mode == "remove") && index == p.Cursor {
 			title = highlight + " ▌" + strings.TrimPrefix(stripANSI(title), "  ") + reset
 		}
 		lines = append(lines, title)
@@ -281,7 +291,7 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 		rows[0] = "Resize the terminal to at least 50×20. Press q to quit."
 		return renderRows(rows, p.Width)
 	}
-	heading := map[string]string{"home": "xswap", "watch": "watching all accounts", "auto": "auto-switch view", "switch": "select account", "disable": "disable / enable account", "remove": "remove account", "confirm": "confirm removal"}[p.Mode]
+	heading := map[string]string{"home": "xswap", "watch": "watching all accounts", "auto": "auto-switch view", "switch": "select account", "rename": "rename account", "disable": "disable / enable account", "remove": "remove account", "confirm": "confirm removal"}[p.Mode]
 	if p.Mode == "home" {
 		heading += " " + clean(version)
 	}
@@ -299,6 +309,9 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 	}
 	if p.Mode == "confirm" {
 		lines = []string{"", bold + "  Remove " + p.Pending + " from the account list?" + reset, muted + "  Credentials and history will be archived locally, not deleted." + reset, "", accent(p.Theme) + "  y Confirm removal   esc Cancel" + reset}
+	}
+	if p.Mode == "rename" {
+		lines = append(lines, "", bold+"  Display name: "+p.Input+"█"+reset, muted+"  Type a name, or leave it empty to use the e-mail. Enter saves; Esc cancels."+reset)
 	}
 	available := p.Height - 6
 	if p.Mode == "home" {
@@ -335,6 +348,9 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 	}
 	if p.Mode == "auto" {
 		footer = "  e Enable / stop   +/- Threshold   r Refresh   esc Back   q Quit"
+	}
+	if p.Mode == "rename" {
+		footer = "  Type display name   enter Save   backspace Delete   esc Cancel   q Quit"
 	}
 	rows[p.Height-2] = accent(p.Theme) + footer + reset
 	rows[p.Height-1] = muted + "  ↑/↓ Navigate  ·  Enter Select  ·  Percentages show quota usage" + reset
@@ -381,6 +397,32 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 		}
 		return "", nil
 	}
+	if p.Mode == "rename" {
+		if key == "backspace" || key == "delete" {
+			if len(p.Input) > 0 {
+				p.Input = p.Input[:len(p.Input)-1]
+			}
+			return "", nil
+		}
+		if key == "enter" {
+			if err := a.setDisplayName(names[p.Cursor], p.Input); err != nil {
+				p.Message = err.Error()
+			} else {
+				p.Message = "Display name updated for " + names[p.Cursor]
+				p.Mode = "home"
+				p.Input = ""
+				p.Offset = 0
+			}
+			return "", nil
+		}
+		if key == "up" || key == "down" || key == "j" || key == "k" { /* handled below */
+		} else if len([]rune(key)) == 1 && key >= " " && key != "\x7f" {
+			if len([]rune(p.Input)) < 64 {
+				p.Input += key
+			}
+			return "", nil
+		}
+	}
 	if key == "t" || key == "ctrl-t" {
 		p.Theme = (p.Theme + 1) % 3
 		return "", nil
@@ -425,7 +467,7 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 	case "down", "j":
 		if p.Mode == "home" {
 			p.MenuCursor = (p.MenuCursor + 1) % len(p.menu())
-		} else if p.Mode == "switch" || p.Mode == "disable" || p.Mode == "remove" {
+		} else if p.Mode == "switch" || p.Mode == "rename" || p.Mode == "disable" || p.Mode == "remove" {
 			p.Cursor = min(p.Cursor+1, len(names)-1)
 		} else {
 			p.Offset++
@@ -433,7 +475,7 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 	case "up", "k":
 		if p.Mode == "home" {
 			p.MenuCursor = (p.MenuCursor + len(p.menu()) - 1) % len(p.menu())
-		} else if p.Mode == "switch" || p.Mode == "disable" || p.Mode == "remove" {
+		} else if p.Mode == "switch" || p.Mode == "rename" || p.Mode == "disable" || p.Mode == "remove" {
 			p.Cursor = max(0, p.Cursor-1)
 		} else {
 			p.Offset = max(0, p.Offset-1)
@@ -450,22 +492,28 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 			if p.menu()[p.MenuCursor] == "Quit" {
 				return "quit", nil
 			}
-			switch p.MenuCursor {
-			case 0:
+			switch p.menu()[p.MenuCursor] {
+			case "Switch account…":
 				p.Mode = "switch"
-			case 1:
+			case "Watch accounts":
 				p.Mode = "watch"
-			case 2:
+			case "Auto-switch view":
 				p.Mode = "auto"
-			case 3:
+			case "Add account…":
 				return "add", nil
-			case 4:
+			case "Rename account…":
+				p.Mode = "rename"
+				p.Input = ""
+				if s, err := a.settings(); err == nil {
+					p.Input = s.DisplayNames[names[p.Cursor]]
+				}
+			case "Disable / enable account…":
 				p.Mode = "disable"
-			case 5:
+			case "Remove account…":
 				p.Mode = "remove"
-			case 6:
+			case "Theme…":
 				p.Theme = (p.Theme + 1) % 3
-			case 7:
+			case "Quit":
 				return "quit", nil
 			}
 			p.Offset = 0
@@ -532,6 +580,8 @@ func parseKeys(buffer []byte, flush bool) ([]string, []byte) {
 		switch buffer[0] {
 		case 3:
 			key = "ctrl-c"
+		case 127:
+			key = "backspace"
 		case 20:
 			key = "ctrl-t"
 		case 10, 13:

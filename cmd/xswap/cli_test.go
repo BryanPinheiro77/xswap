@@ -41,6 +41,25 @@ func TestCLIParsingAndValidation(t *testing.T) {
 	}
 }
 
+func TestCLIRenameDisplayName(t *testing.T) {
+	a := fixture(t)
+	ready(t, a, "work")
+	if err := a.run([]string{"rename", "work", "--label", "Work"}); err != nil {
+		t.Fatal(err)
+	}
+	s, err := a.settings()
+	if err != nil || s.DisplayNames["work"] != "Work" {
+		t.Fatal(s, err)
+	}
+	if err := a.run([]string{"rename", "work", "--label", ""}); err != nil {
+		t.Fatal(err)
+	}
+	s, err = a.settings()
+	if err != nil || len(s.DisplayNames) != 0 {
+		t.Fatal(s, err)
+	}
+}
+
 func isolatedInstaller(t *testing.T) *App {
 	t.Helper()
 	home := t.TempDir()

@@ -46,6 +46,8 @@ macOS/Linux archives for arm64/amd64. Extract the matching archive into a perman
 ```sh
 xswap add                     # Creates account-1, account-2, etc. and opens login
 xswap add work                # Or choose your own account name
+xswap add work --label Work   # Optional private-friendly display name
+xswap rename work --label Personal
 xswap switch work
 codex
 

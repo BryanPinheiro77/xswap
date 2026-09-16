@@ -38,6 +38,7 @@ func usage() {
 
   xswap                         Open the account menu
   xswap add [NAME]               Add an account and open browser login
+  xswap rename NAME [--label X]  Set or clear an account display name
   xswap login NAME               Retry login (--device-auth supported)
   xswap list                    List accounts
   xswap switch NAME             Select an account for new Codex processes
@@ -86,7 +87,7 @@ func parse(args []string) (Options, error) {
 		switch key {
 		case "device-auth", "all", "yes", "once", "dry-run", "check":
 			o.Flags[key] = true
-		case "threshold", "interval", "repo":
+		case "threshold", "interval", "repo", "label":
 			i++
 			if i >= len(args) {
 				return o, fmt.Errorf("--%s requires a value", key)
@@ -175,7 +176,28 @@ func (a *App) run(args []string) error {
 			return err
 		}
 		fmt.Printf("Adding %s. Sign in to the account you want to register.\n", name)
+		if label := o.Values["label"]; label != "" {
+			if err = a.setDisplayName(name, label); err != nil {
+				return err
+			}
+		}
 		return a.login(name, o.Flags["device-auth"])
+	case "rename":
+		if name == "" {
+			return errors.New("usage: xswap rename NAME --label LABEL")
+		}
+		if _, ok := o.Values["label"]; !ok {
+			return errors.New("usage: xswap rename NAME --label LABEL (use an empty label to clear)")
+		}
+		if err = a.setDisplayName(name, o.Values["label"]); err != nil {
+			return err
+		}
+		if o.Values["label"] == "" {
+			fmt.Printf("Display name cleared for %s.\n", name)
+		} else {
+			fmt.Printf("Display name for %s: %s\n", name, strings.TrimSpace(o.Values["label"]))
+		}
+		return nil
 	case "login":
 		if name == "" {
 			return errors.New("usage: xswap login NAME")
@@ -291,7 +313,11 @@ func (a *App) list() error {
 		if disabled(s, name) {
 			note += " · disabled for rotation"
 		}
-		fmt.Printf("%s %s: %s\n", marker, name, note)
+		label := name
+		if custom := strings.TrimSpace(s.DisplayNames[name]); custom != "" {
+			label = custom
+		}
+		fmt.Printf("%s %s: %s\n", marker, label, note)
 	}
 	fmt.Println("\nadd | switch | watch | auto | disable | enable | remove | --help")
 	return nil
