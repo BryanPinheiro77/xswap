@@ -26,16 +26,24 @@ Prerequisite: the official Codex CLI. Building from source also requires Go
 1.26+; release binaries do not require Go. On macOS/Linux, add `~/.local/bin`
 to your `PATH`.
 
-From the source checkout:
+From a source checkout on macOS/Linux:
 
 ```sh
 make install
 xswap
 ```
 
-The installer creates `xswap` and `codex-swap` links and adds a `codex` wrapper.
-The wrapper calls your original CLI with the selected home; it does not modify
-the Codex package. Your existing login stays available as `default`.
+On Windows PowerShell:
+
+```powershell
+go build -trimpath -o xswap.exe ./cmd/xswap
+.\xswap.exe install
+```
+
+The installer creates the `xswap`, `codex-swap`, and `codex` commands using
+platform-specific links or wrappers. The `codex` command calls your original CLI
+with the selected home; it does not modify the Codex package. Your existing login
+stays available as `default`.
 
 [GitHub Releases](https://github.com/BryanPinheiro77/xswap/releases) provide
 macOS, Linux, and Windows archives for arm64/amd64. On macOS/Linux, extract the
@@ -161,7 +169,7 @@ release has been published. Offline checks leave the update menu hidden.
 The updater validates SHA-256 checksums and platform compatibility, then installs
 the executable safely for the current platform. Account profiles and settings
 are preserved. The previous executable is saved at
-`~/.codex-swap/previous-xswap`. Updates replace
-the binary, not a source checkout. Source developers can use `make install`.
+`~/.codex-swap/previous-xswap`. Updates replace the binary, not a source
+checkout. Source developers can rerun the platform installation command above.
 Existing processes continue running their original executable; restart an enabled
 auto-switch monitor with `xswap auto off` followed by `xswap auto on` after updating.
