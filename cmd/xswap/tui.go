@@ -291,7 +291,7 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 		rows[0] = "Resize the terminal to at least 50×20. Press q to quit."
 		return renderRows(rows, p.Width)
 	}
-	heading := map[string]string{"home": "xswap", "watch": "watching all accounts", "auto": "auto-switch view", "switch": "select account", "rename": "rename account", "disable": "disable / enable account", "remove": "remove account", "confirm": "confirm removal"}[p.Mode]
+	heading := map[string]string{"home": "xswap", "watch": "watching all accounts", "auto": "auto-switch view", "switch": "select account", "rename": "select account to rename", "rename-input": "rename account", "disable": "disable / enable account", "remove": "remove account", "confirm": "confirm removal"}[p.Mode]
 	if p.Mode == "home" {
 		heading += " " + clean(version)
 	}
@@ -310,7 +310,7 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 	if p.Mode == "confirm" {
 		lines = []string{"", bold + "  Remove " + p.Pending + " from the account list?" + reset, muted + "  Credentials and history will be archived locally, not deleted." + reset, "", accent(p.Theme) + "  y Confirm removal   esc Cancel" + reset}
 	}
-	if p.Mode == "rename" {
+	if p.Mode == "rename-input" {
 		lines = append(lines, "", bold+"  Display name: "+p.Input+"█"+reset, muted+"  Type a name, or leave it empty to use the e-mail. Enter saves; Esc cancels."+reset)
 	}
 	available := p.Height - 6
@@ -349,7 +349,7 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 	if p.Mode == "auto" {
 		footer = "  e Enable / stop   +/- Threshold   r Refresh   esc Back   q Quit"
 	}
-	if p.Mode == "rename" {
+	if p.Mode == "rename-input" {
 		footer = "  Type display name   enter Save   backspace Delete   esc Cancel   q Quit"
 	}
 	rows[p.Height-2] = accent(p.Theme) + footer + reset
@@ -376,6 +376,11 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 		if p.Mode == "home" {
 			return "quit", nil
 		}
+		if p.Mode == "rename-input" {
+			p.Mode = "rename"
+			p.Input = ""
+			return "", nil
+		}
 		p.Mode = "home"
 		p.Offset = 0
 		p.Pending = ""
@@ -397,7 +402,7 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 		}
 		return "", nil
 	}
-	if p.Mode == "rename" {
+	if p.Mode == "rename-input" {
 		if key == "backspace" || key == "delete" {
 			if len(p.Input) > 0 {
 				p.Input = p.Input[:len(p.Input)-1]
@@ -415,8 +420,7 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 			}
 			return "", nil
 		}
-		if key == "up" || key == "down" || key == "j" || key == "k" { /* handled below */
-		} else if len([]rune(key)) == 1 && key >= " " && key != "\x7f" {
+		if key != "up" && key != "down" && len([]rune(key)) == 1 && key >= " " && key != "\x7f" {
 			if len([]rune(p.Input)) < 64 {
 				p.Input += key
 			}
@@ -504,9 +508,6 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 			case "Rename account…":
 				p.Mode = "rename"
 				p.Input = ""
-				if s, err := a.settings(); err == nil {
-					p.Input = s.DisplayNames[names[p.Cursor]]
-				}
 			case "Disable / enable account…":
 				p.Mode = "disable"
 			case "Remove account…":
@@ -529,6 +530,14 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 				p.Mode = "home"
 				p.Offset = 0
 			}
+		} else if p.Mode == "rename" {
+			name := names[p.Cursor]
+			p.Pending = name
+			p.Input = ""
+			if s, err := a.settings(); err == nil {
+				p.Input = s.DisplayNames[name]
+			}
+			p.Mode = "rename-input"
 		} else if p.Mode == "disable" {
 			s, err := a.settings()
 			if err != nil {
