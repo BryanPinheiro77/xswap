@@ -16,6 +16,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 type fakeTransport func(*http.Request) (*http.Response, error)
@@ -83,6 +84,12 @@ func TestReleaseChecksCacheAndRejectDrafts(t *testing.T) {
 	})}
 	if !a.checkUpdate(context.Background()) || !a.checkUpdate(context.Background()) || calls != 1 {
 		t.Fatal("new release/cache detection failed")
+	}
+	if err := writeJSON(filepath.Join(a.Root, "update-state.json"), updateState{Repository: "owner/xswap", Latest: "v0.1.0", Checked: time.Now().Add(-updateCheckInterval - time.Minute)}); err != nil {
+		t.Fatal(err)
+	}
+	if !a.checkUpdate(context.Background()) || calls != 2 {
+		t.Fatal("stale update cache was not refreshed")
 	}
 	response = `{"tag_name":"v999.0.0","draft":true}`
 	if _, err := a.latestRelease(context.Background()); err == nil {

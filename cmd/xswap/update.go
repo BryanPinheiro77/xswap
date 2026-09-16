@@ -42,6 +42,8 @@ type updateState struct {
 var repoPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9_.-]*[A-Za-z0-9_][A-Za-z0-9_.-]*$`)
 var versionPattern = regexp.MustCompile(`^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$`)
 
+const updateCheckInterval = 15 * time.Minute
+
 func newerVersion(latest, current string) bool {
 	l := versionPattern.FindStringSubmatch(latest)
 	c := versionPattern.FindStringSubmatch(current)
@@ -136,7 +138,7 @@ func (a *App) checkUpdate(ctx context.Context) bool {
 		return false
 	}
 	s := a.cachedUpdate()
-	if s.Repository == a.repository() && time.Since(s.Checked) >= 0 && time.Since(s.Checked) < 6*time.Hour {
+	if s.Repository == a.repository() && time.Since(s.Checked) >= 0 && time.Since(s.Checked) < updateCheckInterval {
 		return newerVersion(s.Latest, version)
 	}
 	r, err := a.latestRelease(ctx)
