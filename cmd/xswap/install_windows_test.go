@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -164,6 +165,37 @@ func TestWindowsBatchCommandPreservesArguments(t *testing.T) {
 	}
 	if strings.Join(result.Args, "\x00") != strings.Join(want, "\x00") {
 		t.Fatalf("args %q, want %q", result.Args, want)
+	}
+}
+
+func TestWindowsLoginAndQuotaQueryThroughBatchCodex(t *testing.T) {
+	a := fixture(t)
+	directory := t.TempDir()
+	fakeCodex := filepath.Join(directory, "fake-codex.exe")
+	build := exec.Command("go", "build", "-o", fakeCodex, filepath.Join("testdata", "fake_codex.go"))
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build fake Codex: %v\n%s", err, output)
+	}
+	batch := filepath.Join(directory, "codex.cmd")
+	if err := os.WriteFile(batch, []byte("@echo off\r\n\"%XSWAP_FAKE_CODEX%\" %*\r\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("XSWAP_FAKE_CODEX", fakeCodex)
+	if err := writeJSON(filepath.Join(a.Root, "installation.json"), map[string]string{"cli": batch}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.create("work"); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.login("work", false); err != nil {
+		t.Fatal("login through batch Codex:", err)
+	}
+	record, err := a.readLimits(context.Background(), "work")
+	if err != nil {
+		t.Fatal("quota query through batch Codex:", err)
+	}
+	if record.Account.Email != "windows@example.com" || record.Limits.Main == nil || record.Limits.Main.Primary == nil || record.Limits.Main.Primary.Used == nil || *record.Limits.Main.Primary.Used != 12 {
+		t.Fatalf("unexpected quota record: %+v", record)
 	}
 }
 
