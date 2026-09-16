@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -37,6 +38,30 @@ func testArchive(t *testing.T, name string, kind byte, data []byte) []byte {
 	}
 	tr.Close()
 	gz.Close()
+	return b.Bytes()
+}
+
+type zipEntry struct {
+	name string
+	data []byte
+}
+
+func testZipArchive(t *testing.T, entries ...zipEntry) []byte {
+	t.Helper()
+	var b bytes.Buffer
+	zw := zip.NewWriter(&b)
+	for _, entry := range entries {
+		writer, err := zw.Create(entry.name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = writer.Write(entry.data); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
 	return b.Bytes()
 }
 func TestUpdateVisibilityAndVersions(t *testing.T) {
@@ -108,6 +133,29 @@ func TestArchiveRejectsUnsafeEntries(t *testing.T) {
 	}
 	if _, err := unpackExecutable(testArchive(t, "xswap", tar.TypeSymlink, nil)); err == nil {
 		t.Fatal("accepted symlink")
+	}
+	for _, name := range []string{"../xswap.exe", "/xswap.exe", "other.exe"} {
+		archive := testZipArchive(t, zipEntry{name, []byte("bad")})
+		if _, err := unpackZipExecutable(archive, "xswap.exe"); err == nil {
+			t.Fatal("accepted zip entry", name)
+		}
+	}
+	duplicate := testZipArchive(t,
+		zipEntry{"xswap.exe", []byte("first")},
+		zipEntry{"xswap.exe", []byte("second")},
+	)
+	if _, err := unpackZipExecutable(duplicate, "xswap.exe"); err == nil {
+		t.Fatal("accepted duplicate Windows executable")
+	}
+	valid := testZipArchive(t,
+		zipEntry{"xswap.exe", []byte("binary")},
+		zipEntry{"README.md", []byte("docs")},
+	)
+	if binary, err := unpackZipExecutable(valid, "xswap.exe"); err != nil || string(binary) != "binary" {
+		t.Fatal("valid Windows archive rejected", err)
+	}
+	if got := releaseArchiveName("v1.2.3", "windows", "amd64"); got != "xswap_v1.2.3_windows_amd64.zip" {
+		t.Fatal("wrong Windows asset name", got)
 	}
 }
 
