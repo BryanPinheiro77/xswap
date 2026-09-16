@@ -63,7 +63,7 @@ jobs:
         run: go build -trimpath -o bin/xswap ./cmd/xswap
 
   windows-compile:
-    name: Quality / windows (compile)
+    name: Quality / windows
     runs-on: windows-latest
     timeout-minutes: 15
     steps:
@@ -76,5 +76,7 @@ jobs:
           cache: false
       - name: Compile tests for Windows
         run: go test -c -o xswap.test.exe ./cmd/xswap
+      - name: Windows installer tests
+        run: go test -run '^TestWindows' ./cmd/xswap
       - name: Build Windows executable
         run: go build -trimpath -o xswap.exe ./cmd/xswap
