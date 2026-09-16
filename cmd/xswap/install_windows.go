@@ -12,6 +12,17 @@ import (
 	"strings"
 )
 
+type windowsCommand struct {
+	name  string
+	codex bool
+}
+
+var windowsCommands = []windowsCommand{
+	{"xswap.cmd", false},
+	{"codex-swap.cmd", false},
+	{"codex.cmd", true},
+}
+
 func windowsInstallDir() (string, error) {
 	base := os.Getenv("LOCALAPPDATA")
 	if base == "" {
@@ -112,10 +123,7 @@ func (a *App) install() error {
 	if err = os.MkdirAll(directory, 0700); err != nil {
 		return err
 	}
-	for _, item := range []struct {
-		name  string
-		codex bool
-	}{{"xswap.cmd", false}, {"codex-swap.cmd", false}, {"codex.cmd", true}} {
+	for _, item := range windowsCommands {
 		path := filepath.Join(directory, item.name)
 		if !ownedWindowsWrapper(path, a.Binary, previous.Manager, item.codex) {
 			return fmt.Errorf("refusing to replace another command at %s", path)
@@ -127,10 +135,7 @@ func (a *App) install() error {
 	if err = writeJSON(filepath.Join(a.Root, "installation.json"), map[string]string{"cli": cli, "manager": a.Binary, "bin": directory}); err != nil {
 		return err
 	}
-	for _, item := range []struct {
-		name  string
-		codex bool
-	}{{"xswap.cmd", false}, {"codex-swap.cmd", false}, {"codex.cmd", true}} {
+	for _, item := range windowsCommands {
 		if err = atomicWrite(filepath.Join(directory, item.name), windowsWrapper(a.Binary, item.codex)); err != nil {
 			return err
 		}
@@ -148,19 +153,13 @@ func (a *App) uninstall() error {
 	if err != nil {
 		return err
 	}
-	for _, item := range []struct {
-		name  string
-		codex bool
-	}{{"xswap.cmd", false}, {"codex-swap.cmd", false}, {"codex.cmd", true}} {
+	for _, item := range windowsCommands {
 		path := filepath.Join(directory, item.name)
 		if exists(path) && !ownedWindowsWrapper(path, a.Binary, "", item.codex) {
 			return fmt.Errorf("refusing to remove another command at %s", path)
 		}
 	}
-	for _, item := range []struct {
-		name  string
-		codex bool
-	}{{"xswap.cmd", false}, {"codex-swap.cmd", false}, {"codex.cmd", true}} {
+	for _, item := range windowsCommands {
 		path := filepath.Join(directory, item.name)
 		if ownedWindowsWrapper(path, a.Binary, "", item.codex) {
 			if err = os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {

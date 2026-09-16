@@ -85,6 +85,55 @@ func TestWindowsInstallRepairAndUninstall(t *testing.T) {
 	}
 }
 
+func TestWindowsUpdateActivatesVersionedExecutable(t *testing.T) {
+	a := fixture(t)
+	local := t.TempDir()
+	t.Setenv("LOCALAPPDATA", local)
+	directory := filepath.Join(local, "XSwap", "bin")
+	if err := os.MkdirAll(directory, 0700); err != nil {
+		t.Fatal(err)
+	}
+	a.Binary = filepath.Join(t.TempDir(), "xswap.exe")
+	if err := os.WriteFile(a.Binary, []byte("old binary"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range windowsCommands {
+		if err := os.WriteFile(filepath.Join(directory, item.name), windowsWrapper(a.Binary, item.codex), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	metadata := windowsInstallation{CLI: filepath.Join(t.TempDir(), "codex.exe"), Manager: a.Binary, Bin: directory}
+	if err := writeJSON(filepath.Join(a.Root, "installation.json"), metadata); err != nil {
+		t.Fatal(err)
+	}
+	newBinary := []byte("new binary")
+	if err := a.replaceInstalledBinary(newBinary, "v1.2.3"); err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(local, "XSwap", "app", "xswap-v1.2.3.exe")
+	if a.Binary != want {
+		t.Fatalf("active binary %q, want %q", a.Binary, want)
+	}
+	installed, err := os.ReadFile(want)
+	if err != nil || string(installed) != string(newBinary) {
+		t.Fatal("new executable was not installed", err)
+	}
+	backup, err := os.ReadFile(filepath.Join(a.Root, "previous-xswap"))
+	if err != nil || string(backup) != "old binary" {
+		t.Fatal("previous executable was not preserved", err)
+	}
+	for _, item := range windowsCommands {
+		wrapper, readErr := os.ReadFile(filepath.Join(directory, item.name))
+		if readErr != nil || string(wrapper) != string(windowsWrapper(want, item.codex)) {
+			t.Fatalf("wrapper %s was not activated: %v", item.name, readErr)
+		}
+	}
+	var updated windowsInstallation
+	if err = readJSON(filepath.Join(a.Root, "installation.json"), &updated); err != nil || updated.Manager != want {
+		t.Fatal("installation metadata was not updated", err)
+	}
+}
+
 func TestWindowsCodexWrapperUsesSelectedAccount(t *testing.T) {
 	manager := os.Getenv("XSWAP_WINDOWS_BINARY")
 	if manager == "" {

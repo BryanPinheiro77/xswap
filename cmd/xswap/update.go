@@ -311,36 +311,7 @@ func (a *App) installRelease(ctx context.Context, r githubRelease) error {
 		return err
 	}
 	defer unlock()
-	if a.Binary == "" {
-		return errors.New("installed executable location unavailable")
-	}
-	// Save the previous executable without touching account data or selection.
-	old, err := os.ReadFile(a.Binary)
-	if err != nil {
-		return err
-	}
-	if err = atomicWrite(filepath.Join(a.Root, "previous-xswap"), old); err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(filepath.Dir(a.Binary), ".xswap-update-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name())
-	if _, err = tmp.Write(binary); err == nil {
-		err = tmp.Chmod(0755)
-	}
-	if err == nil {
-		err = tmp.Sync()
-	}
-	closeErr := tmp.Close()
-	if err != nil {
-		return err
-	}
-	if closeErr != nil {
-		return closeErr
-	}
-	return os.Rename(tmp.Name(), a.Binary)
+	return a.replaceInstalledBinary(binary, r.Tag)
 }
 func (a *App) updateCommand(o Options) (bool, error) {
 	if repo := o.Values["repo"]; repo != "" {
