@@ -47,6 +47,12 @@ initialize handshake, reads account identity, and calls
 The request context bounds lock wait and query duration. Cancellation terminates
 the whole app-server process group and waits for cleanup.
 
+Quota responses are accepted only when they contain complete, finite usage
+windows. A hollow or partial response retains the last valid in-memory reading
+as stale instead of replacing it or refreshing its timestamp. The panel labels
+valid, stale, and unavailable readings explicitly; stale readings never qualify
+for automatic rotation.
+
 ## Automatic rotation
 
 Auto-switch is disabled initially. Enabling it starts a detached monitor with a

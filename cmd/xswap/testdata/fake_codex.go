@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 func main() {
@@ -54,7 +55,7 @@ func serveAppServer() {
 			result = map[string]any{"account": map[string]any{"type": "chatgpt", "email": "windows@example.com", "planType": "plus"}}
 		case "account/rateLimits/read":
 			used := 12.0
-			result = map[string]any{"rateLimits": map[string]any{"limitId": "codex", "primary": map[string]any{"usedPercent": used, "windowDurationMins": 300}}}
+			result = map[string]any{"rateLimits": map[string]any{"limitId": "codex", "primary": map[string]any{"usedPercent": used, "windowDurationMins": 300, "resetsAt": time.Now().Add(time.Hour).Unix()}}}
 		}
 		_ = encoder.Encode(map[string]any{"id": request.ID, "result": result})
 	}

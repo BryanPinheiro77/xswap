@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -305,6 +306,76 @@ func TestThinBarsAndQuotaBuckets(t *testing.T) {
 	}
 }
 
+func TestQuotaResponseReconciliation(t *testing.T) {
+	now := time.Now().Unix()
+	previous := quota(42, 64, now-30)
+	previous.Account.Email = "previous@example.com"
+
+	hollow := Record{Account: Account{Type: "chatgpt", Email: "current@example.com"}}
+	partial := quota(0, 0, now)
+	partial.Limits.Main.Secondary.Resets = nil
+
+	for _, tc := range []struct {
+		name    string
+		current Record
+	}{
+		{"hollow", hollow},
+		{"partial", partial},
+	} {
+		t.Run(tc.name+" preserves the last valid reading", func(t *testing.T) {
+			got := reconcileQuotaRecord(previous, tc.current, errIncompleteQuota.Error())
+			if quotaRecordState(got) != quotaStale || got.Updated != previous.Updated || got.Account.Email != previous.Account.Email || !reflect.DeepEqual(got.Limits, previous.Limits) {
+				t.Fatalf("did not preserve valid snapshot: %+v", got)
+			}
+			if _, eligible := quotaScore(got, now, 120); eligible {
+				t.Fatal("stale quota became eligible for auto-switch")
+			}
+		})
+	}
+
+	unavailable := reconcileQuotaRecord(Record{}, hollow, errIncompleteQuota.Error())
+	if quotaRecordState(unavailable) != quotaUnavailable || unavailable.Updated != 0 {
+		t.Fatalf("hollow first response was not unavailable: %+v", unavailable)
+	}
+
+	zero := quota(0, 0, now)
+	validZero := reconcileQuotaRecord(previous, zero, "")
+	if quotaRecordState(validZero) != quotaValid || validZero.Error != "" {
+		t.Fatalf("genuine zero usage was rejected: %+v", validZero)
+	}
+
+	recovery := quota(5, 10, now+1)
+	recovered := reconcileQuotaRecord(reconcileQuotaRecord(previous, partial, errIncompleteQuota.Error()), recovery, "")
+	if quotaRecordState(recovered) != quotaValid || recovered.Updated != recovery.Updated || !reflect.DeepEqual(recovered.Limits, recovery.Limits) {
+		t.Fatalf("valid recovery did not replace stale data: %+v", recovered)
+	}
+}
+
+func TestWatchPanelDistinguishesQuotaStates(t *testing.T) {
+	a := fixture(t)
+	ready(t, a, "stale")
+	ready(t, a, "unavailable")
+	now := time.Now()
+	valid := quota(10, 20, now.Unix())
+	stale := reconcileQuotaRecord(quota(30, 40, now.Unix()-30), Record{}, errIncompleteQuota.Error())
+	unavailable := reconcileQuotaRecord(Record{}, Record{Account: Account{Type: "chatgpt"}}, errIncompleteQuota.Error())
+	p := Panel{Mode: "watch", Width: 120, Height: 40, Records: map[string]Record{
+		"default":     valid,
+		"stale":       stale,
+		"unavailable": unavailable,
+	}}
+	s, err := a.settings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendered := stripANSI(p.render(a, a.names(), s, now))
+	for _, text := range []string{"Quota data valid", "Quota data stale", "Last valid reading", "Quota data unavailable"} {
+		if !strings.Contains(rendered, text) {
+			t.Fatalf("watch panel does not identify %q:\n%s", text, rendered)
+		}
+	}
+}
+
 func helperCLI(t *testing.T, a *App) {
 	t.Helper()
 	binary, err := os.Executable()
@@ -344,7 +415,16 @@ func TestHelperProcess(t *testing.T) {
 		case "account/read":
 			result = map[string]any{"account": Account{Type: "chatgpt", Email: "test@example.com", Plan: "plus"}}
 		case "account/rateLimits/read":
-			result = quota(5, 65, time.Now().Unix()).Limits
+			record := quota(5, 65, time.Now().Unix())
+			switch os.Getenv("XSWAP_TEST_QUOTA_MODE") {
+			case "hollow":
+				record.Limits = Limits{}
+			case "partial":
+				record.Limits.Main.Secondary.Resets = nil
+			case "zero":
+				record = quota(0, 0, time.Now().Unix())
+			}
+			result = record.Limits
 		}
 		encoder.Encode(map[string]any{"method": "account/updated"})
 		encoder.Encode(map[string]any{"id": request.ID, "result": result})
@@ -377,6 +457,30 @@ func TestOfficialQuotaProtocolAndCancellation(t *testing.T) {
 	if processAlive(pid) {
 		t.Fatal("query left child alive", pid)
 	}
+}
+
+func TestOfficialQuotaResponseValidation(t *testing.T) {
+	for _, mode := range []string{"hollow", "partial"} {
+		t.Run(mode, func(t *testing.T) {
+			a := fixture(t)
+			helperCLI(t, a)
+			t.Setenv("XSWAP_TEST_QUOTA_MODE", mode)
+			record, err := a.readLimits(context.Background(), "default")
+			if !errors.Is(err, errIncompleteQuota) || record.Updated != 0 {
+				t.Fatalf("accepted %s quota response: %+v, %v", mode, record, err)
+			}
+		})
+	}
+
+	t.Run("genuine zero usage", func(t *testing.T) {
+		a := fixture(t)
+		helperCLI(t, a)
+		t.Setenv("XSWAP_TEST_QUOTA_MODE", "zero")
+		record, err := a.readLimits(context.Background(), "default")
+		if err != nil || quotaRecordState(record) != quotaValid {
+			t.Fatalf("rejected genuine zero quota: %+v, %v", record, err)
+		}
+	})
 }
 
 func TestDaemonHelperProcess(t *testing.T) {

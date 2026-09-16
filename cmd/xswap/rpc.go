@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -39,6 +40,69 @@ type Record struct {
 	Limits  Limits  `json:"limits"`
 	Updated int64   `json:"updated"`
 	Error   string  `json:"error,omitempty"`
+	State   string  `json:"state,omitempty"`
+}
+
+const (
+	quotaValid       = "valid"
+	quotaStale       = "stale"
+	quotaUnavailable = "unavailable"
+)
+
+var errIncompleteQuota = errors.New("quota response incomplete")
+
+func completeQuotaWindow(window *Window) bool {
+	if window == nil || window.Used == nil || window.Minutes == nil || window.Resets == nil {
+		return false
+	}
+	return !math.IsNaN(*window.Used) && !math.IsInf(*window.Used, 0) &&
+		*window.Used >= 0 && *window.Used <= 100 && *window.Minutes > 0 && *window.Resets > 0
+}
+
+func hasCompleteQuotaEvidence(limits Limits) bool {
+	found := false
+	for _, bucket := range allBuckets(limits) {
+		for _, window := range []*Window{bucket.Primary, bucket.Secondary} {
+			if window == nil {
+				continue
+			}
+			if !completeQuotaWindow(window) {
+				return false
+			}
+			found = true
+		}
+	}
+	return found
+}
+
+func quotaRecordState(record Record) string {
+	if record.Updated == 0 || !hasCompleteQuotaEvidence(record.Limits) {
+		return quotaUnavailable
+	}
+	if record.State == quotaStale || record.Error != "" {
+		return quotaStale
+	}
+	return quotaValid
+}
+
+func reconcileQuotaRecord(previous, current Record, queryError string) Record {
+	if queryError == "" && current.Updated > 0 && hasCompleteQuotaEvidence(current.Limits) {
+		current.Error = ""
+		current.State = quotaValid
+		return current
+	}
+	if queryError == "" {
+		queryError = errIncompleteQuota.Error()
+	}
+	if previous.Updated > 0 && hasCompleteQuotaEvidence(previous.Limits) {
+		previous.Error = queryError
+		previous.State = quotaStale
+		return previous
+	}
+	current.Updated = 0
+	current.Error = queryError
+	current.State = quotaUnavailable
+	return current
 }
 
 func (a *App) original() (string, error) {
@@ -259,7 +323,13 @@ func (a *App) readLimits(parent context.Context, name string) (Record, error) {
 	if err = json.Unmarshal(data, &limits); err != nil {
 		return Record{}, errors.New("invalid quota response")
 	}
-	return Record{Account: *accountResponse.Account, Limits: limits, Updated: time.Now().Unix()}, nil
+	record := Record{Account: *accountResponse.Account, Limits: limits}
+	if !hasCompleteQuotaEvidence(limits) {
+		return record, errIncompleteQuota
+	}
+	record.Updated = time.Now().Unix()
+	record.State = quotaValid
+	return record, nil
 }
 func allBuckets(limits Limits) map[string]Bucket {
 	buckets := map[string]Bucket{}

@@ -39,7 +39,7 @@ func (a *App) autoState() AutoState {
 	return state
 }
 func quotaScore(record Record, now int64, freshness int) (float64, bool) {
-	if record.Error != "" || record.Updated == 0 || now-record.Updated > int64(freshness) || record.Account.Type != "chatgpt" {
+	if quotaRecordState(record) != quotaValid || now-record.Updated > int64(freshness) || record.Account.Type != "chatgpt" {
 		return 0, false
 	}
 	bucket, ok := allBuckets(record.Limits)["codex"]
@@ -102,6 +102,7 @@ func decide(records map[string]Record, active string, s Settings, now, last int6
 }
 func (a *App) collect(ctx context.Context) map[string]Record {
 	records := map[string]Record{}
+	previous := a.autoState().Records
 	s, err := a.settings()
 	if err != nil {
 		return records
@@ -114,10 +115,11 @@ func (a *App) collect(ctx context.Context) map[string]Record {
 			continue
 		}
 		record, err := a.readLimits(ctx, name)
+		message := ""
 		if err != nil {
-			record = Record{Error: err.Error(), Updated: time.Now().Unix()}
+			message = err.Error()
 		}
-		records[name] = record
+		records[name] = reconcileQuotaRecord(previous[name], record, message)
 	}
 	return records
 }
