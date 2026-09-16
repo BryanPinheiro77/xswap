@@ -60,6 +60,11 @@ No prior login or logout is needed: `add` logs in directly inside a new profile.
 The menu offers switching, watching, auto-switch status, adding, enable/disable,
 removal, theme, and quit. Arrow keys navigate; Enter selects; Esc goes back.
 
+Switching accounts changes the account used by new Codex processes. Existing
+Codex sessions keep the account they started with, so close and reopen a session
+after switching accounts. A future `Restart with another account` flow is tracked
+in [issue #27](https://github.com/BryanPinheiro77/xswap/issues/27).
+
 ## Auto-switch
 
 ```sh

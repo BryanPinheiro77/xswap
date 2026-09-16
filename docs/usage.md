@@ -23,6 +23,11 @@ Profiles retain their assigned names. Creating a new profile does not select it.
 Manual switching affects new Codex processes. Existing processes retain their
 original account. Selection does not alter the Codex desktop application.
 
+An already-running Codex session keeps its original account and `CODEX_HOME`.
+After switching, close and reopen that session to use the new account. XSwap does
+not change authentication in place; a future supervised restart flow is tracked
+in [issue #27](https://github.com/BryanPinheiro77/xswap/issues/27).
+
 Display names are optional labels stored locally in XSwap settings. When set,
 the terminal panel shows the label instead of the account e-mail. Clear one with
 `xswap rename NAME --label ""`; accounts without a label continue to use the
