@@ -3,13 +3,14 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
 )
+
+const batchPercent = "XSWAP_BATCH_LITERAL_PERCENT"
 
 func readStdin(buffer []byte) (int, error) { return os.Stdin.Read(buffer) }
 func isRunnable(info os.FileInfo) bool     { return !info.IsDir() }
@@ -18,27 +19,25 @@ func processCommand(binary string, args ...string) *exec.Cmd {
 	if extension != ".cmd" && extension != ".bat" {
 		return exec.Command(binary, args...)
 	}
-	values := append([]string{binary}, args...)
-	commandLine := ""
-	env := os.Environ()
-	for index, value := range values {
-		key := fmt.Sprintf("XSWAP_BATCH_ARG_%d", index)
-		if index > 0 {
-			commandLine += " "
-		}
-		commandLine += `"!` + key + `!"`
-		env = envWith(env, key, value)
+	commandLine := quoteBatchArgument(binary)
+	for _, arg := range args {
+		commandLine += " " + quoteBatchArgument(arg)
 	}
 	cmd := exec.Command("cmd.exe")
-	cmd.Env = env
-	cmd.SysProcAttr = &syscall.SysProcAttr{CmdLine: `cmd.exe /d /v:on /s /c "` + commandLine + `"`}
+	cmd.Env = envWith(os.Environ(), batchPercent, "%")
+	cmd.SysProcAttr = &syscall.SysProcAttr{CmdLine: `cmd.exe /d /s /c "` + commandLine + `"`}
 	return cmd
+}
+func quoteBatchArgument(value string) string {
+	value = strings.ReplaceAll(value, `%`, `%`+batchPercent+`%`)
+	value = strings.ReplaceAll(value, `"`, `\"`)
+	return `"` + value + `"`
 }
 func setProcessEnvironment(cmd *exec.Cmd, env []string) {
 	for _, entry := range cmd.Env {
-		if strings.HasPrefix(entry, "XSWAP_BATCH_ARG_") {
-			parts := strings.SplitN(entry, "=", 2)
-			env = envWith(env, parts[0], parts[1])
+		if strings.HasPrefix(entry, batchPercent+"=") {
+			env = envWith(env, batchPercent, "%")
+			break
 		}
 	}
 	cmd.Env = env
