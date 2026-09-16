@@ -5,6 +5,8 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ## Unreleased
 
+## v0.2.1 — 2026-09-16
+
 ### Fixed
 
 - Preserve the last valid quota reading when Codex returns an incomplete response,
