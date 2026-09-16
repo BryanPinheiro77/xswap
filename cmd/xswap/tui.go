@@ -638,7 +638,7 @@ func (a *App) panel(mode, filter string, interval int) (string, error) {
 	h, w := terminalSize()
 	p := Panel{Mode: mode, Filter: filter, Records: map[string]Record{}, Width: w, Height: h}
 	updateChecks := make(chan bool, 1)
-	checkDue := time.Now().Add(6 * time.Hour)
+	checkDue := time.Now().Add(updateCheckInterval)
 	check := func() {
 		go func() {
 			available := a.checkUpdate(ctx)
@@ -738,7 +738,7 @@ func (a *App) panel(mode, filter string, interval int) (string, error) {
 		case <-tick.C:
 			if !time.Now().Before(checkDue) {
 				check()
-				checkDue = time.Now().Add(6 * time.Hour)
+				checkDue = time.Now().Add(updateCheckInterval)
 			}
 			if len(buffer) > 0 && time.Since(received) > 120*time.Millisecond {
 				keys, buffer = parseKeys(buffer, true)

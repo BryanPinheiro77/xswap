@@ -5,6 +5,11 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ## Unreleased
 
+### Changed
+
+- Refresh release availability in an open panel every 15 minutes, while keeping
+  cached checks within that interval.
+
 ### Added
 
 - Optional account display names with e-mail fallback for privacy-friendly
