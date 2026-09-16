@@ -90,6 +90,7 @@ func (a *App) dashboard(mode, filter string, interval int) error {
 type panelUpdate struct {
 	Name   string
 	Record Record
+	Error  string
 	Done   bool
 }
 type Panel struct {
@@ -140,6 +141,7 @@ func (p *Panel) accountLines(a *App, names []string, s Settings, now time.Time) 
 	active := a.selected()
 	for index, name := range names {
 		record, ok := p.Records[name]
+		state := quotaRecordState(record)
 		if index == p.Cursor {
 			chosen = len(lines)
 		}
@@ -168,7 +170,7 @@ func (p *Panel) accountLines(a *App, names []string, s Settings, now time.Time) 
 			title += muted + "   (disabled)" + reset
 		}
 		detail := p.Mode != "home" || name == active
-		if !detail && ok {
+		if !detail && ok && state == quotaValid {
 			for _, item := range quotaWindows(record.Limits) {
 				if (item.Label == "5h" || item.Label == "7d") && item.Window.Used != nil {
 					title += usageColor(item.Window.Used) + fmt.Sprintf("   %s %g%%", item.Label, *item.Window.Used) + reset
@@ -179,19 +181,21 @@ func (p *Panel) accountLines(a *App, names []string, s Settings, now time.Time) 
 			title = highlight + " ▌" + strings.TrimPrefix(stripANSI(title), "  ") + reset
 		}
 		lines = append(lines, title)
-		if record.Error != "" {
-			lines = append(lines, "     \x1b[31m"+clean(record.Error)+reset)
-		}
-		if detail && record.Updated > 0 && record.Account.Type != "" {
+		if detail && (state == quotaValid || state == quotaStale) {
 			items := quotaWindows(record.Limits)
-			if len(items) == 0 {
-				lines = append(lines, muted+"     No quota windows returned by the server."+reset)
-			}
 			for _, item := range items {
 				lines = append(lines, quotaLine(item, p.Width, now))
 			}
+			if state == quotaStale {
+				lines = append(lines, "     \x1b[33mQuota data stale — "+clean(record.Error)+reset)
+				lines = append(lines, muted+"     Last valid reading: "+time.Unix(record.Updated, 0).Format("15:04:05")+reset)
+			} else {
+				lines = append(lines, muted+"     Quota data valid · updated "+time.Unix(record.Updated, 0).Format("15:04:05")+reset)
+			}
+		} else if ok && state == quotaUnavailable {
+			lines = append(lines, "     \x1b[31mQuota data unavailable"+reset)
 			if record.Error != "" {
-				lines = append(lines, muted+"     Last successful query: "+time.Unix(record.Updated, 0).Format("15:04:05")+reset)
+				lines = append(lines, muted+"     "+clean(record.Error)+reset)
 			}
 		} else if !ok {
 			lines = append(lines, muted+"     Waiting for quota query…"+reset)
@@ -226,7 +230,9 @@ func (p *Panel) autoLines(a *App, s Settings, now time.Time) []string {
 			record = previous.Records[name]
 		}
 		note := "quotas unavailable"
-		if score, valid := quotaScore(record, now.Unix(), max(120, s.Auto.Interval*2)); valid {
+		if quotaRecordState(record) == quotaStale {
+			note = "quotas stale — excluded from rotation"
+		} else if score, valid := quotaScore(record, now.Unix(), max(120, s.Auto.Interval*2)); valid {
 			note = fmt.Sprintf("%g%% used · %g%% remaining", score, max(0, 100-score))
 		}
 		if disabled(s, name) {
@@ -658,11 +664,12 @@ func (a *App) panel(mode, filter string, interval int) (string, error) {
 					return
 				}
 				record, err := a.readLimits(fetchCtx, name)
+				message := ""
 				if err != nil {
-					record = Record{Error: err.Error()}
+					message = err.Error()
 				}
 				select {
-				case updates <- panelUpdate{Name: name, Record: record}:
+				case updates <- panelUpdate{Name: name, Record: record, Error: message}:
 				case <-fetchCtx.Done():
 					return
 				}
@@ -707,12 +714,8 @@ func (a *App) panel(mode, filter string, interval int) (string, error) {
 			if update.Done {
 				p.Busy = false
 				p.Due = time.Now().Add(time.Duration(interval) * time.Second)
-			} else if update.Record.Error != "" {
-				old := p.Records[update.Name]
-				old.Error = update.Record.Error
-				p.Records[update.Name] = old
 			} else {
-				p.Records[update.Name] = update.Record
+				p.Records[update.Name] = reconcileQuotaRecord(p.Records[update.Name], update.Record, update.Error)
 			}
 			dirty = true
 		case available := <-updateChecks:

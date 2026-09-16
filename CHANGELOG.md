@@ -5,6 +5,11 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ## Unreleased
 
+### Fixed
+
+- Preserve the last valid quota reading when Codex returns an incomplete response,
+  mark retained data as stale, and exclude it from automatic account selection.
+
 ## v0.2.0 — 2026-09-16
 
 ### Added
