@@ -30,12 +30,13 @@ privileges so maintainers do not automatically bypass it.
 
 ## Review the draft
 
-The Release workflow reruns CI on macOS/Linux, verifies an annotated semantic
-tag on `main`, builds four archives, computes SHA-256 checksums, and creates a
-**draft GitHub release** with generated notes. Targets are macOS and Linux,
-each for arm64 and amd64.
+The Release workflow reruns CI on macOS, Linux, and Windows, verifies an annotated
+semantic tag on `main`, builds six archives, computes SHA-256 checksums, and
+creates a **draft GitHub release** with generated notes. Targets are macOS,
+Linux, and Windows, each for arm64 and amd64.
 
-Archives contain `xswap`, README, and license. Version, source commit, and UTC
+Unix archives contain `xswap`; Windows zip files contain `xswap.exe`. Every
+archive also includes the README and license. Version, source commit, and UTC
 build date are embedded; inspect them with `xswap version`. macOS binaries are
 not Apple-notarized. Checksums are not independent signed attestations.
 
@@ -57,13 +58,12 @@ token can write only in the draft job. CI needs no OpenAI key or personal accoun
 ## Installed updates
 
 Release builds embed `github.repository` for the updater. Publish the stable
-draft before clients can discover it. Keep all four platform archives and
-`checksums.txt` attached; archives contain flat regular files `xswap`, `README.md`,
-and `LICENSE`. The updater requires the matching archive and SHA-256 checksum.
+draft before clients can discover it. Keep all six platform archives and
+`checksums.txt` attached; archives contain flat regular files plus the platform
+executable. The updater requires the matching archive and SHA-256 checksum.
 Checksums protect download integrity; they do not replace trust in release
 maintainers or protect against a compromised repository.
 
 Local builds can embed the repository with
-`make release VERSION=v0.1.0 REPOSITORY=OWNER/xswap`. Windows artifacts are not
-produced in this version. Clients check periodically while the panel runs and
-install only after explicit confirmation.
+`make release VERSION=v0.1.0 REPOSITORY=OWNER/xswap`. Clients check periodically
+while the panel runs and install only after explicit confirmation.

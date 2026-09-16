@@ -16,30 +16,41 @@ used by newly launched Codex processes.
 - Enable/disable controls and account removal with local archival.
 - One Go executable, with no Python or third-party Go runtime dependencies.
 
-The first version supports **Codex on macOS and Linux**. Claude support is a
+XSwap supports **Codex on macOS, Linux, and Windows**. Claude support is a
 future improvement. This is an independent community project, not an official
 OpenAI or Anthropic product. `codex-swap` remains a compatibility alias.
 
 ## Install
 
-Prerequisites: the official Codex CLI and `stty` (included on macOS and common
-Linux distributions). Building from source also requires Go 1.26+; release
-binaries do not require Go. Add `~/.local/bin` to your `PATH`.
+Prerequisite: the official Codex CLI. Building from source also requires Go
+1.26+; release binaries do not require Go. On macOS/Linux, add `~/.local/bin`
+to your `PATH`.
 
-From the source checkout:
+From a source checkout on macOS/Linux:
 
 ```sh
 make install
 xswap
 ```
 
-The installer creates `xswap` and `codex-swap` links and adds a `codex` wrapper.
-The wrapper calls your original CLI with the selected home; it does not modify
-the Codex package. Your existing login stays available as `default`.
+On Windows PowerShell:
+
+```powershell
+go build -trimpath -o xswap.exe ./cmd/xswap
+.\xswap.exe install
+```
+
+The installer creates the `xswap`, `codex-swap`, and `codex` commands using
+platform-specific links or wrappers. The `codex` command calls your original CLI
+with the selected home; it does not modify the Codex package. Your existing login
+stays available as `default`.
 
 [GitHub Releases](https://github.com/BryanPinheiro77/xswap/releases) provide
-macOS/Linux archives for arm64/amd64. Extract the matching archive into a permanent directory and run
-`./xswap install`. Keep the executable there after installation.
+macOS, Linux, and Windows archives for arm64/amd64. On macOS/Linux, extract the
+matching archive into a permanent directory, run `./xswap install`, and keep the
+executable there. On Windows, extract the `.zip`, run `.\xswap.exe install` in
+PowerShell, then open a new terminal. The installer adds
+`%LOCALAPPDATA%\XSwap\bin` to your user `PATH`.
 
 ## Quick start
 
@@ -110,7 +121,7 @@ credentials and private account information.
 
 Run `xswap install` if a Codex update overwrites the wrapper.
 `xswap uninstall` stops auto-switch and restores the original CLI without
-deleting profiles. Windows and Claude are not supported in this version.
+deleting profiles. Claude is not supported in this version.
 
 ## Development
 
@@ -138,11 +149,10 @@ Licensed under [MIT](LICENSE).
 
 ## Updates
 
-GitHub releases provide macOS and Linux binaries for Apple Silicon/ARM64 and
-Intel/AMD64. Windows support is planned for a later version.
+GitHub releases provide macOS, Linux, and Windows binaries for ARM64 and AMD64.
 
 Run `xswap version` to see the installed version. XSwap checks published stable
-releases in the background when the panel opens, with a six-hour cache.
+releases in the background when the panel opens, with a 15-minute cache.
 **Update version…** appears only when a newer release is available. Downloads
 and installation require your confirmation; updates are never installed silently.
 
@@ -156,9 +166,10 @@ release, source builds can configure it with
 `xswap update --repo OWNER/xswap --check`. No update is available until a stable
 release has been published. Offline checks leave the update menu hidden.
 
-The updater validates SHA-256 checksums and platform compatibility, then replaces
-the executable atomically. Account profiles and settings are preserved. The
-previous executable is saved at `~/.codex-swap/previous-xswap`. Updates replace
-the binary, not a source checkout. Source developers can use `make install`.
+The updater validates SHA-256 checksums and platform compatibility, then installs
+the executable safely for the current platform. Account profiles and settings
+are preserved. The previous executable is saved at
+`~/.codex-swap/previous-xswap`. Updates replace the binary, not a source
+checkout. Source developers can rerun the platform installation command above.
 Existing processes continue running their original executable; restart an enabled
 auto-switch monitor with `xswap auto off` followed by `xswap auto on` after updating.

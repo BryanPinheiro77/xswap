@@ -27,7 +27,8 @@
         "required_status_checks": [
           {"context": "Branch policy"},
           {"context": "Quality / linux"},
-          {"context": "Quality / macos"}
+          {"context": "Quality / macos"},
+          {"context": "Quality / windows"}
         ]
       }
     }

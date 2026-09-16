@@ -1,7 +1,8 @@
 # Architecture
 
 XSwap is a Go executable with no third-party runtime libraries. It targets
-macOS and Linux and uses POSIX terminal control and advisory file locks.
+macOS, Linux, and Windows. Terminal and process operations use platform-specific
+Go implementations, and state changes use portable lock directories.
 
 Source files and their tests live together in `cmd/xswap/`. The root contains
 build configuration and the project entry documents; community policies live
@@ -14,6 +15,8 @@ in `.github/` and longer guides in `docs/`.
 | `rpc.go` | Official Codex process execution and app-server quota queries |
 | `auto.go` | Background monitor, quota scoring, and rotation decisions |
 | `update.go` | GitHub release checks, archive validation, and atomic executable updates |
+| `install_unix.go`, `install_windows.go` | Platform command installation and removal |
+| `process_unix.go`, `process_windows.go` | Platform process and terminal primitives |
 | `tui.go` | Account menu, watch screen, management, and auto-switch view |
 | `swap_test.go` | Behavioral tests with isolated data and a fake app server |
 
@@ -24,10 +27,17 @@ in `.github/` and longer guides in `docs/`.
 skills directory; credentials, sessions, caches, and databases are not copied.
 Existing named profiles remain compatible across manager upgrades.
 
-The installer replaces command symlinks in `~/.local/bin`. The `codex` entry
+On macOS/Linux, the installer replaces command symlinks in `~/.local/bin`. On
+Windows, it creates owned `.cmd` wrappers in `%LOCALAPPDATA%\XSwap\bin` and adds
+that directory to the user `PATH`. The `codex` entry
 executes the original CLI with the selected home, retaining normal arguments and
 exit behavior. An explicitly exported `CODEX_HOME` takes priority. `xswap run
 NAME` always uses the requested profile. The original package is not modified.
+
+Windows updates place each release in `%LOCALAPPDATA%\XSwap\app` and atomically
+redirect the owned wrappers. This avoids replacing an executable while Windows
+is still running it. Release archives and executable formats are checked against
+the current operating system and architecture before activation.
 
 ## Quota queries
 

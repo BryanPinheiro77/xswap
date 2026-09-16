@@ -10,6 +10,10 @@ import (
 
 func readStdin(buffer []byte) (int, error) { return syscall.Read(int(os.Stdin.Fd()), buffer) }
 func isRunnable(info os.FileInfo) bool     { return !info.IsDir() && info.Mode()&0111 != 0 }
+func processCommand(binary string, args ...string) *exec.Cmd {
+	return exec.Command(binary, args...)
+}
+func setProcessEnvironment(cmd *exec.Cmd, env []string) { cmd.Env = env }
 func replaceProcess(binary string, args, env []string) error {
 	return syscall.Exec(binary, append([]string{binary}, args...), env)
 }

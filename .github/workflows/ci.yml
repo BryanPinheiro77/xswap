@@ -66,6 +66,8 @@ jobs:
     name: Quality / windows
     runs-on: windows-latest
     timeout-minutes: 15
+    env:
+      XSWAP_WINDOWS_BINARY: ${{ github.workspace }}\xswap.exe
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -74,9 +76,9 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
-      - name: Compile tests for Windows
-        run: go test -c -o xswap.test.exe ./cmd/xswap
-      - name: Windows installer tests
-        run: go test -run '^TestWindows' ./cmd/xswap
       - name: Build Windows executable
         run: go build -trimpath -o xswap.exe ./cmd/xswap
+      - name: Compile tests for Windows
+        run: go test -c -o xswap.test.exe ./cmd/xswap
+      - name: Windows integration tests
+        run: go test -run '^TestWindows' ./cmd/xswap

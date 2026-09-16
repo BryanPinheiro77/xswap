@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"bufio"
 	"bytes"
 	"compress/gzip"
@@ -9,6 +10,7 @@ import (
 	"crypto/sha256"
 	"debug/elf"
 	"debug/macho"
+	"debug/pe"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -157,6 +159,12 @@ func assetURL(r githubRelease, repo, name string) (string, error) {
 	return "", fmt.Errorf("release asset missing or invalid: %s", name)
 }
 func unpackExecutable(data []byte) ([]byte, error) {
+	if runtime.GOOS == "windows" {
+		return unpackZipExecutable(data, "xswap.exe")
+	}
+	return unpackTarExecutable(data, "xswap")
+}
+func unpackTarExecutable(data []byte, expected string) ([]byte, error) {
 	gz, err := gzip.NewReader(bytes.NewReader(data))
 	if err != nil {
 		return nil, err
@@ -178,7 +186,7 @@ func unpackExecutable(data []byte) ([]byte, error) {
 		if h.Name == "README.md" || h.Name == "LICENSE" {
 			continue
 		}
-		if h.Name != "xswap" || binary != nil {
+		if h.Name != expected || binary != nil {
 			return nil, errors.New("invalid executable archive")
 		}
 		binary, err = io.ReadAll(tr)
@@ -187,7 +195,41 @@ func unpackExecutable(data []byte) ([]byte, error) {
 		}
 	}
 	if binary == nil {
-		return nil, errors.New("archive has no xswap executable")
+		return nil, errors.New("archive has no XSwap executable")
+	}
+	return binary, nil
+}
+func unpackZipExecutable(data []byte, expected string) ([]byte, error) {
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return nil, err
+	}
+	var binary []byte
+	for _, entry := range zr.File {
+		if entry.Name == "README.md" || entry.Name == "LICENSE" {
+			continue
+		}
+		if entry.Name != expected || binary != nil || !entry.Mode().IsRegular() || entry.UncompressedSize64 == 0 || entry.UncompressedSize64 > 32<<20 {
+			return nil, errors.New("invalid executable archive")
+		}
+		reader, openErr := entry.Open()
+		if openErr != nil {
+			return nil, openErr
+		}
+		binary, err = io.ReadAll(io.LimitReader(reader, 32<<20+1))
+		closeErr := reader.Close()
+		if err != nil {
+			return nil, err
+		}
+		if closeErr != nil {
+			return nil, closeErr
+		}
+		if len(binary) == 0 || len(binary) > 32<<20 {
+			return nil, errors.New("invalid executable archive")
+		}
+	}
+	if binary == nil {
+		return nil, errors.New("archive has no XSwap executable")
 	}
 	return binary, nil
 }
@@ -208,10 +250,25 @@ func validExecutable(data []byte) bool {
 		defer f.Close()
 		return (runtime.GOARCH == "arm64" && f.Machine == elf.EM_AARCH64) || (runtime.GOARCH == "amd64" && f.Machine == elf.EM_X86_64)
 	}
+	if runtime.GOOS == "windows" {
+		f, err := pe.NewFile(bytes.NewReader(data))
+		if err != nil {
+			return false
+		}
+		defer f.Close()
+		return (runtime.GOARCH == "arm64" && f.Machine == pe.IMAGE_FILE_MACHINE_ARM64) || (runtime.GOARCH == "amd64" && f.Machine == pe.IMAGE_FILE_MACHINE_AMD64)
+	}
 	return false
 }
+func releaseArchiveName(tag, goos, goarch string) string {
+	extension := ".tar.gz"
+	if goos == "windows" {
+		extension = ".zip"
+	}
+	return fmt.Sprintf("xswap_%s_%s_%s%s", tag, goos, goarch, extension)
+}
 func (a *App) installRelease(ctx context.Context, r githubRelease) error {
-	name := fmt.Sprintf("xswap_%s_%s_%s.tar.gz", r.Tag, runtime.GOOS, runtime.GOARCH)
+	name := releaseArchiveName(r.Tag, runtime.GOOS, runtime.GOARCH)
 	archiveURL, err := assetURL(r, a.repository(), name)
 	if err != nil {
 		return err
@@ -254,36 +311,7 @@ func (a *App) installRelease(ctx context.Context, r githubRelease) error {
 		return err
 	}
 	defer unlock()
-	if a.Binary == "" {
-		return errors.New("installed executable location unavailable")
-	}
-	// Save the previous executable without touching account data or selection.
-	old, err := os.ReadFile(a.Binary)
-	if err != nil {
-		return err
-	}
-	if err = atomicWrite(filepath.Join(a.Root, "previous-xswap"), old); err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(filepath.Dir(a.Binary), ".xswap-update-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name())
-	if _, err = tmp.Write(binary); err == nil {
-		err = tmp.Chmod(0755)
-	}
-	if err == nil {
-		err = tmp.Sync()
-	}
-	closeErr := tmp.Close()
-	if err != nil {
-		return err
-	}
-	if closeErr != nil {
-		return closeErr
-	}
-	return os.Rename(tmp.Name(), a.Binary)
+	return a.replaceInstalledBinary(binary, r.Tag)
 }
 func (a *App) updateCommand(o Options) (bool, error) {
 	if repo := o.Values["repo"]; repo != "" {

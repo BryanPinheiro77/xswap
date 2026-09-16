@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -110,8 +109,8 @@ func (a *App) login(name string, device bool) error {
 	if err != nil {
 		return err
 	}
-	cmd := exec.Command(cli, args...)
-	cmd.Env = env
+	cmd := processCommand(cli, args...)
+	setProcessEnvironment(cmd, env)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -145,8 +144,8 @@ func (a *App) readLimits(parent context.Context, name string) (Record, error) {
 	if err != nil {
 		return Record{}, err
 	}
-	cmd := exec.Command(cli, args...)
-	cmd.Env = env
+	cmd := processCommand(cli, args...)
+	setProcessEnvironment(cmd, env)
 	configureProcess(cmd)
 	input, err := cmd.StdinPipe()
 	if err != nil {

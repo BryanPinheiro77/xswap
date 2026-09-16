@@ -1,7 +1,7 @@
 # Contributing
 
 XSwap welcomes bug fixes, documentation improvements, and focused features.
-The current release supports the official Codex CLI on macOS and Linux. Claude
+The current release supports the official Codex CLI on macOS, Linux, and Windows. Claude
 support is a future project; discuss its design before implementing a backend.
 
 ## Local setup
