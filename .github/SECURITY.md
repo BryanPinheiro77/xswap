@@ -30,10 +30,10 @@ erasure is necessary, and revoke sessions using your account provider when neede
 
 The original `default` account retains its existing credential-store setting.
 Named profiles force file-based storage in their isolated Codex home. Quota
-queries and account removal use per-account advisory locks; config and selection
+queries and account removal use per-account lock directories; config and selection
 updates use a shared state lock. These locks coordinate manager processes, not
 arbitrary external programs that edit account files.
 
 Release archives include SHA-256 checksums. Checksums detect accidental corruption;
 they are not independently signed publisher attestations. macOS binaries are not
-Apple-notarized. Windows is not currently supported.
+Apple-notarized, and Windows binaries are not code-signed.

@@ -47,7 +47,7 @@ reporting, sets squash-only merges, and creates issue/release labels.
 | Rule | Result |
 | --- | --- |
 | Protected `main`, `release/**` | PR-only updates; no direct pushes |
-| Required checks | `Branch policy`, `Quality / linux`, `Quality / macos` |
+| Required checks | `Branch policy`, `Quality / linux`, `Quality / macos`, `Quality / windows` |
 | Up-to-date branches | Checks must pass against current base changes |
 | Reviews | One approval by default; zero with `--solo` |
 | Conversation resolution | Review threads must be resolved |
@@ -69,7 +69,7 @@ permissions, and no personal Codex credentials.
 
 ## Verify protection
 
-Open a documentation PR and confirm the three required contexts appear.
+Open a documentation PR and confirm the four required contexts appear.
 Verify failed checks, unresolved discussions, and direct pushes block merging.
 The local preparation does not create a remote repository, upload files, or
 apply administration changes automatically.

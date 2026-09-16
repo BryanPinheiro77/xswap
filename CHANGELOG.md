@@ -14,6 +14,11 @@ tags; unreleased work stays in this section until a release is prepared.
 
 - Optional account display names with e-mail fallback for privacy-friendly
   terminal panels (`xswap add NAME --label LABEL` and `xswap rename`).
+- Native Windows support with user-PATH command wrappers, interactive terminal
+  handling, portable process control, and Codex `.exe`, `.cmd`, or `.bat`
+  launchers.
+- Windows AMD64 and ARM64 release zip files, native CI integration tests, and
+  versioned self-update activation that does not replace a running executable.
 
 ## v0.1.1 — 2026-09-15
 

@@ -17,7 +17,7 @@ body:
     id: environment
     attributes:
       label: Platform and Codex CLI version
-      placeholder: macOS arm64, codex-cli 0.x
+      placeholder: Windows amd64, codex-cli 0.x
     validations:
       required: true
   - type: textarea

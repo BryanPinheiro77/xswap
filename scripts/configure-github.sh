@@ -43,6 +43,6 @@ gh label create roadmap --repo "$repo" --color 0e8a16 --description 'Planned wor
 gh label create area:ci --repo "$repo" --color 1d76db --description 'CI and repository automation' --force
 gh label create area:testing --repo "$repo" --color 1d76db --description 'Behavioral and platform validation' --force
 gh label create area:security --repo "$repo" --color b60205 --description 'Security policy and hardening; report vulnerabilities privately' --force
-gh label create platform:windows --repo "$repo" --color 0366d6 --description 'Future Windows support' --force
+gh label create platform:windows --repo "$repo" --color 0366d6 --description 'Windows support' --force
 gh label create provider:claude --repo "$repo" --color d876e3 --description 'Future Claude provider support' --force
 echo "Repository settings and rulesets applied to $repo."

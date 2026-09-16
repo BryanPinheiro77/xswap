@@ -123,8 +123,13 @@ GitHub check, and `xswap update` to install with confirmation. Automation can us
 **Update version…** only when its background check detects a newer stable release.
 Drafts and prereleases are excluded. Failed checks do not show an update.
 
-Checks are cached for six hours. The CLI check always refreshes that cache.
+Checks are cached for 15 minutes. The CLI check always refreshes that cache.
 Source builds need `xswap update --repo OWNER/xswap --check` once; release binaries
-embed the repository. Updates support macOS and Linux, arm64 and amd64. Windows
-is future scope. Account data is preserved. Restart existing XSwap processes and
+embed the repository. Updates support macOS, Linux, and Windows on arm64 and
+amd64. Account data is preserved. Restart existing XSwap processes and
 an enabled auto-switch daemon after a CLI update.
+
+On Windows, extract the release `.zip`, run `.\xswap.exe install` from
+PowerShell, and open a new terminal after the installer adds the XSwap command
+directory to your user `PATH`. The updater activates a versioned executable so
+it never needs to overwrite the running `.exe`.
