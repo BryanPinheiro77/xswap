@@ -233,7 +233,7 @@ func TestPanelMenuWatchBackAndManagement(t *testing.T) {
 	if p.Mode != "home" {
 		t.Fatal(p.Mode)
 	}
-	p.MenuCursor = 4
+	p.MenuCursor = 5
 	p.key(a, a.names(), "enter")
 	p.Cursor = 1
 	p.key(a, a.names(), "enter")

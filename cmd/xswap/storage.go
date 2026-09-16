@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -27,8 +28,9 @@ type AutoConfig struct {
 	Margin    int  `json:"margin"`
 }
 type Settings struct {
-	Disabled []string   `json:"disabled"`
-	Auto     AutoConfig `json:"auto"`
+	Disabled     []string          `json:"disabled"`
+	DisplayNames map[string]string `json:"displayNames,omitempty"`
+	Auto         AutoConfig        `json:"auto"`
 }
 
 func newApp() *App {
@@ -123,7 +125,7 @@ func writeJSON(path string, v any) error {
 	return atomicWrite(path, append(data, '\n'))
 }
 func (a *App) settings() (Settings, error) {
-	s := Settings{Disabled: []string{}, Auto: AutoConfig{false, 90, 60, 300, 5}}
+	s := Settings{Disabled: []string{}, DisplayNames: map[string]string{}, Auto: AutoConfig{false, 90, 60, 300, 5}}
 	data, err := os.ReadFile(filepath.Join(a.Root, "settings.json"))
 	if errors.Is(err, os.ErrNotExist) {
 		return s, nil
@@ -132,10 +134,46 @@ func (a *App) settings() (Settings, error) {
 		return s, err
 	}
 	err = json.Unmarshal(data, &s)
+	if s.DisplayNames == nil {
+		s.DisplayNames = map[string]string{}
+	}
 	if err == nil && (s.Auto.Threshold < 1 || s.Auto.Threshold > 100 || s.Auto.Interval < 10 || s.Auto.Cooldown < 0 || s.Auto.Margin < 0) {
 		err = errors.New("invalid auto-switch configuration")
 	}
 	return s, err
+}
+func (a *App) displayName(name string) string {
+	s, err := a.settings()
+	if err == nil && s.DisplayNames != nil {
+		if label := strings.TrimSpace(s.DisplayNames[name]); label != "" {
+			return label
+		}
+	}
+	return name
+}
+func (a *App) setDisplayName(name, label string) error {
+	if _, err := a.require(name); err != nil {
+		return err
+	}
+	label = strings.TrimSpace(label)
+	if len([]rune(label)) > 64 {
+		return errors.New("display name must be 64 characters or fewer")
+	}
+	return a.withState(func() error {
+		s, err := a.settings()
+		if err != nil {
+			return err
+		}
+		if s.DisplayNames == nil {
+			s.DisplayNames = map[string]string{}
+		}
+		if label == "" {
+			delete(s.DisplayNames, name)
+		} else {
+			s.DisplayNames[name] = label
+		}
+		return writeJSON(filepath.Join(a.Root, "settings.json"), s)
+	})
 }
 func disabled(s Settings, name string) bool {
 	for _, item := range s.Disabled {

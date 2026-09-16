@@ -5,6 +5,11 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ## Unreleased
 
+### Added
+
+- Optional account display names with e-mail fallback for privacy-friendly
+  terminal panels (`xswap add NAME --label LABEL` and `xswap rename`).
+
 ## v0.1.1 — 2026-09-15
 
 ### Fixed

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -152,5 +153,34 @@ func TestRemovalRejectsSymlinkProfiles(t *testing.T) {
 	}
 	if !exists(outside) {
 		t.Fatal("removed external directory")
+	}
+}
+
+func TestDisplayNamePersistenceAndFallback(t *testing.T) {
+	a := fixture(t)
+	ready(t, a, "work")
+	s, err := a.settings()
+	if err != nil || s.DisplayNames == nil {
+		t.Fatal("missing display name settings", s, err)
+	}
+	if err := a.setDisplayName("work", "Work account"); err != nil {
+		t.Fatal(err)
+	}
+	s, err = a.settings()
+	if err != nil || s.DisplayNames["work"] != "Work account" {
+		t.Fatal(s, err)
+	}
+	if err := a.setDisplayName("work", ""); err != nil {
+		t.Fatal(err)
+	}
+	s, err = a.settings()
+	if err != nil || len(s.DisplayNames) != 0 {
+		t.Fatal(s, err)
+	}
+	if err := a.setDisplayName("missing", "Nope"); err == nil {
+		t.Fatal("accepted missing account")
+	}
+	if err := a.setDisplayName("work", strings.Repeat("x", 65)); err == nil {
+		t.Fatal("accepted oversized display name")
 	}
 }

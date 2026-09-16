@@ -6,6 +6,8 @@
 xswap add
 # Opens browser login and creates account-1, account-2, etc.
 xswap add work
+xswap add work --label Work
+xswap rename work --label Personal
 xswap list
 xswap switch work
 codex
@@ -21,11 +23,19 @@ Profiles retain their assigned names. Creating a new profile does not select it.
 Manual switching affects new Codex processes. Existing processes retain their
 original account. Selection does not alter the Codex desktop application.
 
+Display names are optional labels stored locally in XSwap settings. When set,
+the terminal panel shows the label instead of the account e-mail. Clear one with
+`xswap rename NAME --label ""`; accounts without a label continue to use the
+e-mail returned by Codex.
+
 ## Menu and watching
 
 Run `xswap` for the account menu. Arrow keys navigate; Enter activates the
 selected item. `s` selects accounts, `w` watches, `u` opens auto-switch view,
 `a` adds an account, Ctrl+T changes the theme, and `q` quits.
+
+Choose **Rename account…** in the menu to edit an optional display name. Leave
+the name empty to return to the e-mail fallback.
 
 ```sh
 xswap watch
