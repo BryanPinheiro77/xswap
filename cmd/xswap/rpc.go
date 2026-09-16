@@ -12,7 +12,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -55,7 +54,7 @@ func (a *App) original() (string, error) {
 		return "", err
 	}
 	info, err := os.Stat(metadata.CLI)
-	if err != nil || info.Mode()&0111 == 0 {
+	if err != nil || !isRunnable(info) {
 		return "", errors.New("original Codex CLI unavailable; reinstall Codex and run codex-swap install")
 	}
 	return metadata.CLI, nil
@@ -93,7 +92,7 @@ func (a *App) launch(name string, args []string, honorEnv bool) error {
 	if err != nil {
 		return err
 	}
-	return syscall.Exec(cli, append([]string{cli}, args...), env)
+	return replaceProcess(cli, args, env)
 }
 func (a *App) login(name string, device bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
