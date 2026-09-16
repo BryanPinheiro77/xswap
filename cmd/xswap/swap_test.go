@@ -225,6 +225,28 @@ func TestPanelMenuWatchBackAndManagement(t *testing.T) {
 			t.Fatal("missing menu item", label)
 		}
 	}
+	p.MenuCursor = 4
+	p.key(a, a.names(), "enter")
+	if p.Mode != "rename" {
+		t.Fatal("rename did not open account selector", p.Mode)
+	}
+	p.Cursor = 1
+	p.key(a, a.names(), "enter")
+	if p.Mode != "rename-input" || p.Input != "" {
+		t.Fatal("rename input did not select account", p.Mode, p.Input)
+	}
+	p.key(a, a.names(), "W")
+	p.key(a, a.names(), "o")
+	p.key(a, a.names(), "r")
+	p.key(a, a.names(), "k")
+	p.key(a, a.names(), "enter")
+	if p.Mode != "home" {
+		t.Fatal("rename did not return home", p.Mode)
+	}
+	s, _ = a.settings()
+	if s.DisplayNames["work"] != "Work" {
+		t.Fatal("rename did not persist", s.DisplayNames)
+	}
 	p.key(a, a.names(), "w")
 	if p.Mode != "watch" {
 		t.Fatal(p.Mode)
