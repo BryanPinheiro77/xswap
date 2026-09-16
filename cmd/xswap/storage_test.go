@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -140,6 +141,9 @@ func TestRemovalFailuresPreserveProfile(t *testing.T) {
 }
 
 func TestRemovalRejectsSymlinkProfiles(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation requires elevated Windows privileges")
+	}
 	a := fixture(t)
 	outside := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(a.Root, "profiles"), 0700); err != nil {

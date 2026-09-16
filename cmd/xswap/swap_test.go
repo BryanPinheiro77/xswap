@@ -10,7 +10,6 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 )
@@ -375,8 +374,8 @@ func TestOfficialQuotaProtocolAndCancellation(t *testing.T) {
 		t.Fatal(err)
 	}
 	pid, _ := strconv.Atoi(string(data))
-	if err = syscall.Kill(pid, 0); err != syscall.ESRCH {
-		t.Fatal("query left child alive", pid, err)
+	if processAlive(pid) {
+		t.Fatal("query left child alive", pid)
 	}
 }
 

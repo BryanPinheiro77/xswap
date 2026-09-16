@@ -12,7 +12,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -188,22 +187,17 @@ func (a *App) lock(ctx context.Context, name string) (func(), error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return nil, err
 	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0600)
-	if err != nil {
-		return nil, err
-	}
+	lockPath := path + ".lockdir"
 	for {
-		err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		err := os.Mkdir(lockPath, 0700)
 		if err == nil {
-			return func() { syscall.Flock(int(f.Fd()), syscall.LOCK_UN); f.Close() }, nil
+			return func() { _ = os.Remove(lockPath) }, nil
 		}
-		if err != syscall.EWOULDBLOCK && err != syscall.EAGAIN {
-			f.Close()
+		if !errors.Is(err, os.ErrExist) {
 			return nil, err
 		}
 		select {
 		case <-ctx.Done():
-			f.Close()
 			return nil, ctx.Err()
 		case <-time.After(50 * time.Millisecond):
 		}

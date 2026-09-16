@@ -148,7 +148,7 @@ func (a *App) readLimits(parent context.Context, name string) (Record, error) {
 	}
 	cmd := exec.Command(cli, args...)
 	cmd.Env = env
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	configureProcess(cmd)
 	input, err := cmd.StdinPipe()
 	if err != nil {
 		return Record{}, err
@@ -185,17 +185,17 @@ func (a *App) readLimits(parent context.Context, name string) (Record, error) {
 	defer func() {
 		cancel()
 		input.Close()
-		syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+		terminateProcess(cmd, false)
 		done := make(chan struct{})
 		go func() { cmd.Wait(); close(done) }()
 		select {
 		case <-done:
 		case <-time.After(2 * time.Second):
-			syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			terminateProcess(cmd, true)
 			<-done
 		}
 		// The npm launcher can exit before its native child; stop any survivors.
-		syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		terminateProcess(cmd, true)
 		output.Close()
 		<-scanDone
 	}()
