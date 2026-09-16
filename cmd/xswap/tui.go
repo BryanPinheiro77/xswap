@@ -7,13 +7,13 @@ import (
 	"fmt"
 	"math"
 	"os"
-	"os/exec"
 	"os/signal"
 	"regexp"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
+
+	"golang.org/x/term"
 )
 
 const reset = "\x1b[0m"
@@ -34,30 +34,16 @@ func usageColor(used *float64) string {
 	}
 	return "\x1b[32m"
 }
-func stty(args ...string) (string, error) {
-	cmd := exec.Command("stty", args...)
-	cmd.Stdin = os.Stdin
-	data, err := cmd.Output()
-	return strings.TrimSpace(string(data)), err
-}
 func interactive() bool {
-	if os.Getenv("TERM") == "" || os.Getenv("TERM") == "dumb" {
+	if os.Getenv("TERM") == "dumb" {
 		return false
 	}
-	_, err := stty("-g")
-	return err == nil
+	return term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd()))
 }
 func terminalSize() (int, int) {
-	data, err := stty("size")
-	if err == nil {
-		fields := strings.Fields(data)
-		if len(fields) == 2 {
-			h, _ := strconv.Atoi(fields[0])
-			w, _ := strconv.Atoi(fields[1])
-			if h > 0 && w > 0 {
-				return h, w
-			}
-		}
+	w, h, err := term.GetSize(int(os.Stdout.Fd()))
+	if err == nil && h > 0 && w > 0 {
+		return h, w
 	}
 	return 30, 120
 }
@@ -602,15 +588,15 @@ func parseKeys(buffer []byte, flush bool) ([]string, []byte) {
 	return keys, buffer
 }
 func (a *App) panel(mode, filter string, interval int) (string, error) {
-	saved, err := stty("-g")
+	saved, err := term.MakeRaw(int(os.Stdin.Fd()))
 	if err != nil {
 		return "", err
 	}
-	if _, err = stty("-icanon", "-echo", "min", "0", "time", "1"); err != nil {
-		return "", err
-	}
 	fmt.Print("\x1b[?1049h\x1b[?25l\x1b[2J")
-	defer func() { stty(saved); fmt.Print(reset + "\x1b[?25h\x1b[?1049l") }()
+	defer func() {
+		_ = term.Restore(int(os.Stdin.Fd()), saved)
+		fmt.Print(reset + "\x1b[?25h\x1b[?1049l")
+	}()
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 	updates := make(chan panelUpdate, 32)
