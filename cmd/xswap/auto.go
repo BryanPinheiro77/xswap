@@ -219,7 +219,7 @@ func (a *App) ensureDaemon() {
 	}
 	cmd := exec.Command(a.Binary, "__daemon")
 	cmd.Env = envWith(os.Environ(), "CODEX_SWAP_HOME", a.Root)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	configureDaemon(cmd)
 	if err = cmd.Start(); err == nil {
 		cmd.Process.Release()
 	}

@@ -620,7 +620,7 @@ func (a *App) panel(mode, filter string, interval int) (string, error) {
 		defer close(inputDone)
 		buffer := make([]byte, 64)
 		for ctx.Err() == nil {
-			n, err := syscall.Read(int(os.Stdin.Fd()), buffer)
+			n, err := readStdin(buffer)
 			if err != nil {
 				return
 			}
