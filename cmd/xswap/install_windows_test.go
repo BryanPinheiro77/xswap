@@ -134,6 +134,39 @@ func TestWindowsUpdateActivatesVersionedExecutable(t *testing.T) {
 	}
 }
 
+func TestWindowsBatchCommandPreservesArguments(t *testing.T) {
+	directory := t.TempDir()
+	fakeCodex := filepath.Join(directory, "fake-codex.exe")
+	build := exec.Command("go", "build", "-o", fakeCodex, filepath.Join("testdata", "fake_codex.go"))
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build fake Codex: %v\n%s", err, output)
+	}
+	batch := filepath.Join(directory, "codex.cmd")
+	if err := os.WriteFile(batch, []byte("@echo off\r\n\"%XSWAP_FAKE_CODEX%\" %*\r\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	capture := filepath.Join(directory, "capture.json")
+	want := []string{"space value", "rock&roll", "%PATH%", "bang!value", `say "hello"`}
+	cmd := processCommand(batch, want...)
+	setProcessEnvironment(cmd, envWith(envWith(os.Environ(), "XSWAP_FAKE_CODEX", fakeCodex), "XSWAP_TEST_CAPTURE", capture))
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("run batch Codex: %v\n%s", err, output)
+	}
+	var result struct {
+		Args []string `json:"args"`
+	}
+	data, err := os.ReadFile(capture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = json.Unmarshal(data, &result); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(result.Args, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("args %q, want %q", result.Args, want)
+	}
+}
+
 func TestWindowsCodexWrapperUsesSelectedAccount(t *testing.T) {
 	manager := os.Getenv("XSWAP_WINDOWS_BINARY")
 	if manager == "" {
@@ -165,9 +198,8 @@ func TestWindowsCodexWrapperUsesSelectedAccount(t *testing.T) {
 
 	capture := filepath.Join(t.TempDir(), "capture.json")
 	wrapper := filepath.Join(local, "XSwap", "bin", "codex.cmd")
-	commandLine := `call "` + wrapper + `" exec "hello world"`
-	cmd := exec.Command("cmd.exe", "/d", "/c", commandLine)
-	cmd.Env = envWith(envWith(os.Environ(), "CODEX_SWAP_HOME", a.Root), "XSWAP_TEST_CAPTURE", capture)
+	cmd := processCommand(wrapper, "exec", "hello world")
+	setProcessEnvironment(cmd, envWith(envWith(os.Environ(), "CODEX_SWAP_HOME", a.Root), "XSWAP_TEST_CAPTURE", capture))
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("run codex wrapper: %v\n%s", err, output)
 	}
