@@ -5,6 +5,11 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ## Unreleased
 
+### Changed
+
+- Avoid duplicate CI matrices for feature-branch pushes while preserving full
+  pull request, protected-branch, merge queue, and release validation.
+
 ## v0.3.3 — 2026-09-17
 
 ### Fixed
