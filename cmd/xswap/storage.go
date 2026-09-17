@@ -16,8 +16,8 @@ import (
 )
 
 type App struct {
-	Root, DefaultHome, Binary string
-	HTTPClient                *http.Client
+	Root, DefaultHome, Binary, PackageManager string
+	HTTPClient                                *http.Client
 }
 type AutoConfig struct {
 	Enabled   bool `json:"enabled"`
@@ -46,7 +46,14 @@ func newApp() *App {
 	}
 	binary, _ := os.Executable()
 	binary, _ = filepath.EvalSymlinks(binary)
-	return &App{Root: root, DefaultHome: filepath.Join(home, ".codex"), Binary: binary}
+	packageManager := strings.ToLower(strings.TrimSpace(os.Getenv("XSWAP_PACKAGE_MANAGER")))
+	if packageManager != "homebrew" {
+		packageManager = ""
+	}
+	if managed := os.Getenv("XSWAP_EXECUTABLE"); packageManager != "" && filepath.IsAbs(managed) {
+		binary = filepath.Clean(managed)
+	}
+	return &App{Root: root, DefaultHome: filepath.Join(home, ".codex"), Binary: binary, PackageManager: packageManager}
 }
 
 var validName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$`)

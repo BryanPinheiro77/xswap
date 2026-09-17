@@ -25,6 +25,26 @@ func replaceLink(path, target string) error {
 	return nil
 }
 
+func sameExecutablePath(left, right string) bool {
+	if filepath.Clean(left) == filepath.Clean(right) {
+		return true
+	}
+	resolvedLeft, leftErr := filepath.EvalSymlinks(left)
+	resolvedRight, rightErr := filepath.EvalSymlinks(right)
+	return leftErr == nil && rightErr == nil && filepath.Clean(resolvedLeft) == filepath.Clean(resolvedRight)
+}
+
+func linkTargets(path, target string) bool {
+	link, err := os.Readlink(path)
+	if err != nil {
+		return false
+	}
+	if !filepath.IsAbs(link) {
+		link = filepath.Join(filepath.Dir(path), link)
+	}
+	return sameExecutablePath(link, target)
+}
+
 func (a *App) install() error {
 	var previous struct {
 		Manager string `json:"manager"`
@@ -41,7 +61,7 @@ func (a *App) install() error {
 		if err != nil {
 			return err
 		}
-		if cli == a.Binary || strings.HasSuffix(cli, "codex_swap.py") {
+		if sameExecutablePath(cli, a.Binary) || strings.HasSuffix(cli, "codex_swap.py") {
 			return errors.New("cannot locate the original Codex CLI")
 		}
 	}
@@ -57,10 +77,11 @@ func (a *App) install() error {
 			if info.Mode()&os.ModeSymlink == 0 {
 				return fmt.Errorf("refusing to replace another executable at %s", path)
 			}
-			target, _ := filepath.EvalSymlinks(path)
-			link, _ := os.Readlink(path)
 			legacy := filepath.Join(filepath.Dir(a.Binary), "codex-swap")
-			if target != a.Binary && target != cli && target != legacy && (previous.Manager == "" || link != previous.Manager) && !strings.HasSuffix(target, "/codex_swap.py") {
+			target, _ := filepath.EvalSymlinks(path)
+			owned := linkTargets(path, a.Binary) || linkTargets(path, cli) || linkTargets(path, legacy) ||
+				(previous.Manager != "" && linkTargets(path, previous.Manager)) || strings.HasSuffix(target, "/codex_swap.py")
+			if !owned {
 				return fmt.Errorf("refusing to replace another program at %s", path)
 			}
 		}
@@ -95,8 +116,7 @@ func (a *App) uninstall() error {
 	directory := filepath.Join(home, ".local", "bin")
 	for _, name := range []string{"codex-swap", "xswap", "codex"} {
 		path := filepath.Join(directory, name)
-		target, _ := filepath.EvalSymlinks(path)
-		if target != a.Binary {
+		if !linkTargets(path, a.Binary) {
 			continue
 		}
 		if name == "codex" {
