@@ -5,6 +5,8 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ## Unreleased
 
+## v0.3.3 — 2026-09-17
+
 ### Fixed
 
 - Make draft release uploads resumable and retry-safe, reusing verified assets,
