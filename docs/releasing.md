@@ -50,6 +50,11 @@ and validate the generated formula before copying it to the tap. Publish the
 draft through GitHub when ready. Failed jobs and draft creation do not
 automatically publish a public release.
 
+Immediately after publishing, update `Formula/xswap.rb` in the official tap and
+verify `brew audit --strict BryanPinheiro77/tap/xswap`. Homebrew-managed clients
+discover the GitHub release first and refresh the tap when the user confirms the
+panel update, so the tap must not intentionally lag behind a published release.
+
 Local artifact verification:
 
 ```sh

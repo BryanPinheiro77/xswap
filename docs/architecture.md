@@ -81,10 +81,11 @@ stable path, so Cellar version directories can change during upgrades without
 breaking commands. The wrapper identifies Homebrew to XSwap through restricted
 process environment metadata.
 
-Package-managed builds never offer the standalone GitHub self-update action.
-They direct upgrades back to Homebrew, keeping package ownership and rollback
-state consistent. Standalone release archives retain XSwap's confirmed,
-checksum-validated updater.
+Package-managed builds use the same release discovery and panel action as
+standalone builds. After confirmation, Homebrew installations refresh the tap
+and run `brew upgrade xswap`, keeping package ownership and rollback state
+consistent. Standalone release archives retain XSwap's confirmed,
+checksum-validated binary updater.
 
 ## Future providers
 

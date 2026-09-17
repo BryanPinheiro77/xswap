@@ -129,6 +129,11 @@ embed the repository. Updates support macOS, Linux, and Windows on arm64 and
 amd64. Account data is preserved. Restart existing XSwap processes and
 an enabled auto-switch daemon after a CLI update.
 
+Homebrew installations use the same update check and panel action. After
+confirmation, XSwap runs `brew update` and `brew upgrade xswap`, then restarts
+through Homebrew's stable executable path. Standalone installations use XSwap's
+checksum-validated binary updater.
+
 On Windows, extract the release `.zip`, run `.\xswap.exe install` from
 PowerShell, and open a new terminal after the installer adds the XSwap command
 directory to your user `PATH`. The updater activates a versioned executable so
