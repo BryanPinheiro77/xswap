@@ -21,14 +21,12 @@ darwin_arm64=$(checksum "xswap_${VERSION}_darwin_arm64.tar.gz")
 darwin_amd64=$(checksum "xswap_${VERSION}_darwin_amd64.tar.gz")
 linux_arm64=$(checksum "xswap_${VERSION}_linux_arm64.tar.gz")
 linux_amd64=$(checksum "xswap_${VERSION}_linux_amd64.tar.gz")
-formula_version=${VERSION#v}
 mkdir -p "$(dirname "$OUTPUT")"
 
 cat > "$OUTPUT" <<EOF
 class Xswap < Formula
   desc "Account switcher and quota monitor for Codex CLI"
   homepage "https://github.com/${REPOSITORY}"
-  version "${formula_version}"
   license "MIT"
 
   on_macos do

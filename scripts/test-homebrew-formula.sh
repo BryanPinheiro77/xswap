@@ -16,7 +16,7 @@ EOF
 
 VERSION=$version CHECKSUMS=$checksums OUTPUT=$formula sh scripts/render-homebrew-formula.sh
 ruby -c "$formula" >/dev/null
-grep -Fq 'version "9.8.7"' "$formula"
+! grep -Eq '^  version ' "$formula"
 grep -Fq 'XSWAP_PACKAGE_MANAGER=homebrew' "$formula"
 grep -Fq 'opt/xswap/bin/xswap' "$formula"
 grep -Fq 'brew upgrade xswap' "$formula"
