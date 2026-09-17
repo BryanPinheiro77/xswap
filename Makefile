@@ -15,6 +15,7 @@ check-fmt:
 	@test -z "$$(gofmt -l cmd/xswap/*.go)" || (gofmt -l cmd/xswap/*.go; exit 1)
 check-packaging:
 	sh scripts/test-homebrew-formula.sh
+	sh scripts/test-release-publisher.sh
 test:
 	go test -race ./...
 vet:
