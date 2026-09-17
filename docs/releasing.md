@@ -39,6 +39,14 @@ semantic tag on `main`, builds six archives, computes SHA-256 checksums, renders
 the Homebrew formula, and creates a **draft GitHub release** with generated notes.
 Targets are macOS, Linux, and Windows, each for arm64 and amd64.
 
+Draft creation and asset uploads are separate. The workflow retains the numeric
+release ID, uploads each asset with bounded retries, and resumes an existing
+single draft for the tag. Assets whose GitHub SHA-256 digest already matches are
+reused; incomplete or divergent assets are replaced. Multiple drafts for the
+same tag stop the workflow for explicit maintainer review. The workflow verifies
+all six archive checksums and requires exactly eight matching assets before it
+finishes.
+
 Unix archives contain `xswap`; Windows zip files contain `xswap.exe`. Every
 archive also includes the README and license. The release includes `xswap.rb` for
 the official tap. Version, source commit, and UTC

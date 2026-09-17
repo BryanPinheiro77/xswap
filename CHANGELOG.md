@@ -5,6 +5,11 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ## Unreleased
 
+### Fixed
+
+- Make draft release uploads resumable and retry-safe, reusing verified assets,
+  replacing incomplete uploads, and rejecting duplicate drafts explicitly.
+
 ## v0.3.2 — 2026-09-17
 
 ### Fixed

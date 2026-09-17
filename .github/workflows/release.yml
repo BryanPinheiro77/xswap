@@ -45,11 +45,10 @@ jobs:
           COMMIT: ${{ github.sha }}
           REPOSITORY: ${{ github.repository }}
         run: sh scripts/build-release.sh
-      - name: Create draft with generated notes
+      - name: Create or resume verified draft
         env:
           GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
         shell: bash
-        run: |
-          gh release create "$GITHUB_REF_NAME" dist/*.tar.gz dist/*.zip dist/checksums.txt dist/xswap.rb \
-            --verify-tag --draft --generate-notes --title "$GITHUB_REF_NAME"
+        run: sh scripts/publish-release-draft.sh

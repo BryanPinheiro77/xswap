@@ -21,6 +21,7 @@ call GitHub, or update the contributor's installed executable.
 | Quota protocol | Handshake, notifications, account and quota responses | Cancellation terminates and waits for the server process |
 | Panel | Menu, watch/back, enable/disable, removal, thin bars | Cancelled removal; update item hidden without a newer release |
 | Updates | Stable release discovery, caching, confirmed installation, Homebrew routing, Unix atomic replacement, Windows version activation, backup | Homebrew refresh failure; draft/prerelease/invalid tags, invalid repositories, offline/HTTP/JSON errors, oversized responses, checksum mismatch, unsafe/duplicate tar or zip entries, foreign asset URLs, unconfirmed noninteractive install |
+| Release publishing | New and resumed drafts, verified asset reuse, bounded upload retry | Divergent/starter assets replaced; duplicate drafts rejected |
 
 ## Limits and release validation
 
@@ -38,6 +39,9 @@ every terminal size and key sequence.
 
 Before publishing a release, smoke-test the interactive panel and official
 login on accessible target platforms. Verify the draft artifacts and checksums.
+`scripts/test-release-publisher.sh` uses a fake GitHub CLI to test retries,
+resumption, digest comparison, replacement, and duplicate-draft rejection
+without calling GitHub or creating a release.
 After the first stable release is published, validate discovery and installation
 from that real GitHub release in an isolated installation. Until then, updater
 tests verify the protocol and file-handling behavior with simulated downloads.
