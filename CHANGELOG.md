@@ -5,6 +5,13 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ## Unreleased
 
+## v0.3.1 — 2026-09-17
+
+### Changed
+
+- Show release updates in Homebrew-managed panels and route confirmed upgrades
+  through `brew update` and `brew upgrade xswap` before restarting XSwap.
+
 ## v0.3.0 — 2026-09-17
 
 ### Added

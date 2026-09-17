@@ -20,7 +20,7 @@ call GitHub, or update the contributor's installed executable.
 | Monitor | Background operation and clean stop | Duplicate monitor exits without taking over |
 | Quota protocol | Handshake, notifications, account and quota responses | Cancellation terminates and waits for the server process |
 | Panel | Menu, watch/back, enable/disable, removal, thin bars | Cancelled removal; update item hidden without a newer release |
-| Updates | Stable release discovery, caching, confirmed installation, Unix atomic replacement, Windows version activation, backup | Draft/prerelease/invalid tags, invalid repositories, offline/HTTP/JSON errors, oversized responses, checksum mismatch, unsafe/duplicate tar or zip entries, foreign asset URLs, unconfirmed noninteractive install |
+| Updates | Stable release discovery, caching, confirmed installation, Homebrew routing, Unix atomic replacement, Windows version activation, backup | Homebrew refresh failure; draft/prerelease/invalid tags, invalid repositories, offline/HTTP/JSON errors, oversized responses, checksum mismatch, unsafe/duplicate tar or zip entries, foreign asset URLs, unconfirmed noninteractive install |
 
 ## Limits and release validation
 

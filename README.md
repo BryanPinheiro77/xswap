@@ -34,10 +34,10 @@ xswap install
 xswap
 ```
 
-Homebrew manages XSwap upgrades with `brew upgrade xswap`. The XSwap update
-menu stays hidden for package-managed installations. Before removing the formula,
-run `xswap uninstall` to restore the original Codex command, followed by
-`brew uninstall xswap`.
+Homebrew manages the installed files. XSwap still detects new releases and shows
+**Update version…**; after confirmation it refreshes Homebrew and runs
+`brew upgrade xswap`. Before removing the formula, run `xswap uninstall` to
+restore the original Codex command, followed by `brew uninstall xswap`.
 
 From a source checkout on macOS/Linux:
 
@@ -179,9 +179,11 @@ release, source builds can configure it with
 `xswap update --repo OWNER/xswap --check`. No update is available until a stable
 release has been published. Offline checks leave the update menu hidden.
 
-The updater validates SHA-256 checksums and platform compatibility, then installs
-the executable safely for the current platform. Account profiles and settings
-are preserved. The previous executable is saved at
+For Homebrew installations, the same menu action confirms and runs `brew update`
+followed by `brew upgrade xswap`, then restarts XSwap through its stable Homebrew
+path. Standalone installations validate SHA-256 checksums and platform
+compatibility before replacing the executable safely. Account profiles and settings
+are preserved. For standalone installations, the previous executable is saved at
 `~/.codex-swap/previous-xswap`. Updates replace the binary, not a source
 checkout. Source developers can rerun the platform installation command above.
 Existing processes continue running their original executable; restart an enabled
