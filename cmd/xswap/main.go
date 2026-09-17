@@ -56,7 +56,7 @@ func usage() {
   xswap uninstall               Restore the original Codex command
   xswap version                 Show version, commit, and build date
   xswap update --check          Check published GitHub releases
-  xswap update                  Install a release after confirmation
+  xswap update                  Install the latest update after confirmation
 
 Auto-switch changes the account used by NEW Codex processes.
 Existing processes keep the account with which they were started.

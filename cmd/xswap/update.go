@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -136,7 +137,7 @@ func (a *App) latestRelease(ctx context.Context) (githubRelease, error) {
 	return r, err
 }
 func (a *App) checkUpdate(ctx context.Context) bool {
-	if a.PackageManager != "" || a.repository() == "" {
+	if a.repository() == "" {
 		return false
 	}
 	s := a.cachedUpdate()
@@ -145,6 +146,27 @@ func (a *App) checkUpdate(ctx context.Context) bool {
 	}
 	r, err := a.latestRelease(ctx)
 	return err == nil && newerVersion(r.Tag, version)
+}
+
+func (a *App) runCommand(ctx context.Context, name string, args ...string) error {
+	if a.CommandRunner != nil {
+		return a.CommandRunner(ctx, name, args...)
+	}
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	return cmd.Run()
+}
+
+func (a *App) updateWithHomebrew(ctx context.Context) error {
+	fmt.Println("Refreshing Homebrew…")
+	if err := a.runCommand(ctx, "brew", "update"); err != nil {
+		return fmt.Errorf("brew update failed: %w", err)
+	}
+	fmt.Println("Upgrading XSwap with Homebrew…")
+	if err := a.runCommand(ctx, "brew", "upgrade", "xswap"); err != nil {
+		return fmt.Errorf("brew upgrade xswap failed: %w", err)
+	}
+	return nil
 }
 func assetURL(r githubRelease, repo, name string) (string, error) {
 	for _, asset := range r.Assets {
@@ -314,9 +336,6 @@ func (a *App) installRelease(ctx context.Context, r githubRelease) error {
 	return a.replaceInstalledBinary(binary, r.Tag)
 }
 func (a *App) updateCommand(o Options) (bool, error) {
-	if a.PackageManager == "homebrew" {
-		return false, errors.New("XSwap is managed by Homebrew; update with: brew upgrade xswap")
-	}
 	if repo := o.Values["repo"]; repo != "" {
 		if !repoPattern.MatchString(repo) {
 			return false, errors.New("repository must be OWNER/REPO")
@@ -325,9 +344,9 @@ func (a *App) updateCommand(o Options) (bool, error) {
 			return false, err
 		}
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-	r, err := a.latestRelease(ctx)
+	checkCtx, cancelCheck := context.WithTimeout(context.Background(), 60*time.Second)
+	r, err := a.latestRelease(checkCtx)
+	cancelCheck()
 	if err != nil {
 		return false, err
 	}
@@ -344,13 +363,28 @@ func (a *App) updateCommand(o Options) (bool, error) {
 		if !interactive() {
 			return false, errors.New("use an interactive terminal or --yes to confirm installation")
 		}
-		fmt.Printf("Install %s from %s? [y/N] ", r.Tag, a.repository())
+		if a.PackageManager == "homebrew" {
+			fmt.Printf("Upgrade to %s with Homebrew? [y/N] ", r.Tag)
+		} else {
+			fmt.Printf("Install %s from %s? [y/N] ", r.Tag, a.repository())
+		}
 		answer, _ := bufio.NewReader(os.Stdin).ReadString('\n')
 		if strings.ToLower(strings.TrimSpace(answer)) != "y" {
 			return false, nil
 		}
 	}
-	if err = a.installRelease(ctx, r); err != nil {
+	if a.PackageManager == "homebrew" {
+		updateCtx, cancelUpdate := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancelUpdate()
+		if err = a.updateWithHomebrew(updateCtx); err != nil {
+			return false, err
+		}
+		fmt.Println("Updated to", r.Tag, "with Homebrew — restarting XSwap.")
+		return true, nil
+	}
+	installCtx, cancelInstall := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancelInstall()
+	if err = a.installRelease(installCtx, r); err != nil {
 		return false, err
 	}
 	fmt.Println("Updated to", r.Tag, "— restart XSwap to use the new version.")

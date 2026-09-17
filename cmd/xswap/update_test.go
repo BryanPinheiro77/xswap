@@ -96,17 +96,62 @@ func TestUpdateVisibilityAndVersions(t *testing.T) {
 func TestHomebrewManagedInstallUsesPackageUpdates(t *testing.T) {
 	a := fixture(t)
 	a.PackageManager = "homebrew"
+	if err := writeJSON(filepath.Join(a.Root, "update.json"), map[string]string{"Repository": "owner/xswap"}); err != nil {
+		t.Fatal(err)
+	}
 	requests := 0
 	a.HTTPClient = &http.Client{Transport: fakeTransport(func(*http.Request) (*http.Response, error) {
 		requests++
-		return nil, errors.New("unexpected request")
+		return &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"tag_name":"v999.0.0"}`))}, nil
 	})}
-	if a.checkUpdate(context.Background()) || requests != 0 {
-		t.Fatal("package-managed install checked GitHub releases")
+	if !a.checkUpdate(context.Background()) || requests != 1 {
+		t.Fatal("package-managed install did not detect a GitHub release")
 	}
-	installed, err := a.updateCommand(Options{})
-	if installed || err == nil || !strings.Contains(err.Error(), "brew upgrade xswap") || requests != 0 {
-		t.Fatal("package-managed update was not redirected to Homebrew", installed, err, requests)
+	commands := []string{}
+	a.CommandRunner = func(_ context.Context, name string, args ...string) error {
+		commands = append(commands, strings.Join(append([]string{name}, args...), " "))
+		return nil
+	}
+	installed, err := a.updateCommand(Options{Flags: map[string]bool{"check": true}})
+	if installed || err != nil || len(commands) != 0 {
+		t.Fatal("Homebrew check attempted installation", installed, err, commands)
+	}
+	installed, err = a.updateCommand(Options{Flags: map[string]bool{"yes": true}})
+	if !installed || err != nil || strings.Join(commands, ",") != "brew update,brew upgrade xswap" {
+		t.Fatal("package-managed update was not routed through Homebrew", installed, err, commands)
+	}
+}
+
+func TestHomebrewUpdatePreservesCommandFailures(t *testing.T) {
+	for _, tc := range []struct {
+		name, message string
+		failAt, calls int
+	}{
+		{"refresh", "brew update failed", 1, 1},
+		{"upgrade", "brew upgrade xswap failed", 2, 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a := fixture(t)
+			a.PackageManager = "homebrew"
+			if err := writeJSON(filepath.Join(a.Root, "update.json"), map[string]string{"Repository": "owner/xswap"}); err != nil {
+				t.Fatal(err)
+			}
+			a.HTTPClient = &http.Client{Transport: fakeTransport(func(*http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"tag_name":"v999.0.0"}`))}, nil
+			})}
+			commands := 0
+			a.CommandRunner = func(_ context.Context, name string, args ...string) error {
+				commands++
+				if commands == tc.failAt {
+					return errors.New("package manager unavailable")
+				}
+				return nil
+			}
+			installed, err := a.updateCommand(Options{Flags: map[string]bool{"yes": true}})
+			if installed || err == nil || !strings.Contains(err.Error(), tc.message) || commands != tc.calls {
+				t.Fatal("Homebrew command failure was not preserved", installed, err, commands)
+			}
+		})
 	}
 }
 
