@@ -37,6 +37,18 @@ installation, wrappers, Codex routing, batch launchers, and safe update
 activation. Automated tests do not exercise an actual browser OAuth login or
 every terminal size and key sequence.
 
+## CI event policy
+
+Pull requests targeting any branch run the complete Linux, macOS, and Windows
+matrix. This keeps checks available to fork contributions and lets the branch
+policy job reject unsupported targets. Feature-branch pushes do not run a
+second matrix for the same commit.
+
+Pushes to `main` and `release/**` run the complete matrix again after integration
+so protected branches are independently validated. Merge queue commits also run
+through `merge_group`. Tag releases call the same workflow before building a
+draft, preserving release validation without broadening ordinary push triggers.
+
 Before publishing a release, smoke-test the interactive panel and official
 login on accessible target platforms. Verify the draft artifacts and checksums.
 `scripts/test-release-publisher.sh` uses a fake GitHub CLI to test retries,
