@@ -84,8 +84,17 @@ func TestUpdateVisibilityAndVersions(t *testing.T) {
 	p.Mode = "home"
 	p.MenuCursor = 6
 	action, err := p.key(fixture(t), []string{"default"}, "enter")
+	if err != nil || action != "" || p.Mode != "confirm-update" {
+		t.Fatalf("update selection did not request confirmation: %s %s %v", p.Mode, action, err)
+	}
+	action, err = p.key(fixture(t), []string{"default"}, "y")
 	if err != nil || action != "update" {
-		t.Fatalf("update selection: %s %v", action, err)
+		t.Fatalf("confirmed update selection: %s %v", action, err)
+	}
+	p.Mode = "confirm-update"
+	action, err = p.key(fixture(t), []string{"default"}, "esc")
+	if err != nil || action != "" || p.Mode != "home" {
+		t.Fatalf("cancelled update selection: %s %s %v", p.Mode, action, err)
 	}
 	a := fixture(t)
 	if a.checkUpdate(context.Background()) {

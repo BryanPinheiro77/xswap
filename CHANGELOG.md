@@ -5,6 +5,11 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ## Unreleased
 
+### Fixed
+
+- Keep update confirmation inside the terminal panel so one `y` confirms the
+  selected update without input being consumed during terminal-mode changes.
+
 ## v0.3.1 — 2026-09-17
 
 ### Changed

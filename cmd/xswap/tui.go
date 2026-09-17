@@ -58,7 +58,7 @@ func (a *App) dashboard(mode, filter string, interval int) error {
 		}
 		if action == "update" {
 			fmt.Println("Checking for updates…")
-			installed, updateErr := a.updateCommand(Options{})
+			installed, updateErr := a.updateCommand(Options{Flags: map[string]bool{"yes": true}})
 			if updateErr != nil {
 				fmt.Println("Update failed:", updateErr)
 			}
@@ -283,7 +283,7 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 		rows[0] = "Resize the terminal to at least 50×20. Press q to quit."
 		return renderRows(rows, p.Width)
 	}
-	heading := map[string]string{"home": "xswap", "watch": "watching all accounts", "auto": "auto-switch view", "switch": "select account", "rename": "select account to rename", "rename-input": "rename account", "disable": "disable / enable account", "remove": "remove account", "confirm": "confirm removal"}[p.Mode]
+	heading := map[string]string{"home": "xswap", "watch": "watching all accounts", "auto": "auto-switch view", "switch": "select account", "rename": "select account to rename", "rename-input": "rename account", "disable": "disable / enable account", "remove": "remove account", "confirm": "confirm removal", "confirm-update": "confirm update"}[p.Mode]
 	if p.Mode == "home" {
 		heading += " " + clean(version)
 	}
@@ -301,6 +301,13 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 	}
 	if p.Mode == "confirm" {
 		lines = []string{"", bold + "  Remove " + p.Pending + " from the account list?" + reset, muted + "  Credentials and history will be archived locally, not deleted." + reset, "", accent(p.Theme) + "  y Confirm removal   esc Cancel" + reset}
+	}
+	if p.Mode == "confirm-update" {
+		method := "the built-in updater"
+		if a.PackageManager == "homebrew" {
+			method = "Homebrew"
+		}
+		lines = []string{"", bold + "  Install the available XSwap update?" + reset, muted + "  The update will be installed with " + method + "." + reset, "", accent(p.Theme) + "  y Confirm update   esc Cancel" + reset}
 	}
 	if p.Mode == "rename-input" {
 		lines = append(lines, "", bold+"  Display name: "+p.Input+"█"+reset, muted+"  Type a name, or leave it empty to use the e-mail. Enter saves; Esc cancels."+reset)
@@ -394,6 +401,12 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 		}
 		return "", nil
 	}
+	if p.Mode == "confirm-update" {
+		if key == "y" {
+			return "update", nil
+		}
+		return "", nil
+	}
 	if p.Mode == "rename-input" {
 		if key == "backspace" || key == "delete" {
 			if len(p.Input) > 0 {
@@ -479,7 +492,9 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 	case "enter":
 		if p.Mode == "home" {
 			if p.menu()[p.MenuCursor] == "Update version…" {
-				return "update", nil
+				p.Mode = "confirm-update"
+				p.Offset = 0
+				return "", nil
 			}
 			if p.menu()[p.MenuCursor] == "Theme…" {
 				p.Theme = (p.Theme + 1) % 3

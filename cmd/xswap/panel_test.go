@@ -88,6 +88,7 @@ func TestUpdateSelectionLeavesRealTerminalPanel(t *testing.T) {
 	}()
 	var output bytes.Buffer
 	selected := false
+	confirmed := false
 	for {
 		select {
 		case chunk, ok := <-chunks:
@@ -96,11 +97,17 @@ func TestUpdateSelectionLeavesRealTerminalPanel(t *testing.T) {
 			}
 			output.Write(chunk)
 			if !selected && strings.Contains(output.String(), "Update version…") {
-				// Exercise the actual raw-terminal input and event loop, not only Panel.key.
+				// Exercise selection and confirmation in the actual raw-terminal event loop.
 				if _, err := io.WriteString(stdin, strings.Repeat("\x1b[B", 6)+"\r"); err != nil {
 					t.Fatal(err)
 				}
 				selected = true
+			}
+			if selected && !confirmed && strings.Contains(output.String(), "Install the available XSwap update?") {
+				if _, err := io.WriteString(stdin, "y"); err != nil {
+					t.Fatal(err)
+				}
+				confirmed = true
 			}
 			if strings.Contains(output.String(), "XSWAP_PANEL_ACTION:update") {
 				if !strings.Contains(output.String(), "\x1b[?25h\x1b[?1049l") {
