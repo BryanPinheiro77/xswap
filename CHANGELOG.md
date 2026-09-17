@@ -5,6 +5,18 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ## Unreleased
 
+## v0.3.0 — 2026-09-17
+
+### Added
+
+- Homebrew distribution for macOS and Linux with stable command wrappers and a
+  release-generated formula validated in CI.
+
+### Changed
+
+- Route package-managed upgrades through Homebrew and hide the standalone update
+  action for those installations.
+
 ## v0.2.1 — 2026-09-16
 
 ### Fixed

@@ -26,6 +26,19 @@ Prerequisite: the official Codex CLI. Building from source also requires Go
 1.26+; release binaries do not require Go. On macOS/Linux, add `~/.local/bin`
 to your `PATH`.
 
+Recommended on macOS or Linux with Homebrew:
+
+```sh
+brew install BryanPinheiro77/tap/xswap
+xswap install
+xswap
+```
+
+Homebrew manages XSwap upgrades with `brew upgrade xswap`. The XSwap update
+menu stays hidden for package-managed installations. Before removing the formula,
+run `xswap uninstall` to restore the original Codex command, followed by
+`brew uninstall xswap`.
+
 From a source checkout on macOS/Linux:
 
 ```sh
