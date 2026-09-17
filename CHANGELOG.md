@@ -5,6 +5,8 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ## Unreleased
 
+## v0.3.2 — 2026-09-17
+
 ### Fixed
 
 - Keep update confirmation inside the terminal panel so one `y` confirms the
