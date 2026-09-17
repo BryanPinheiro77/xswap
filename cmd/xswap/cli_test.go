@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -124,6 +125,58 @@ func TestInstallerRepairAndUninstallInTemporaryHome(t *testing.T) {
 	profile, _ := a.profile("work")
 	if !exists(filepath.Join(profile, "auth.json")) {
 		t.Fatal("uninstall lost account")
+	}
+}
+
+func TestUnixInstallerKeepsStableHomebrewLink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix symlink behavior")
+	}
+	a := isolatedInstaller(t)
+	cellarBinary := a.Binary
+	stable := filepath.Join(t.TempDir(), "opt", "xswap", "bin", "xswap")
+	if err := os.MkdirAll(filepath.Dir(stable), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(cellarBinary, stable); err != nil {
+		t.Fatal(err)
+	}
+	a.Binary = stable
+	a.PackageManager = "homebrew"
+	if err := a.install(); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.install(); err != nil {
+		t.Fatal("repair through stable package link", err)
+	}
+	home, _ := os.UserHomeDir()
+	installed := filepath.Join(home, ".local", "bin", "xswap")
+	target, err := os.Readlink(installed)
+	if err != nil || target != stable {
+		t.Fatal("installer did not retain stable Homebrew path", target, err)
+	}
+	if err := a.uninstall(); err != nil {
+		t.Fatal(err)
+	}
+	if exists(installed) {
+		t.Fatal("Homebrew-managed wrapper remained after uninstall")
+	}
+}
+
+func TestNewAppReadsHomebrewWrapperMetadata(t *testing.T) {
+	stable := filepath.Join(t.TempDir(), "opt", "xswap", "bin", "xswap")
+	t.Setenv("XSWAP_PACKAGE_MANAGER", "homebrew")
+	t.Setenv("XSWAP_EXECUTABLE", stable)
+	a := newApp()
+	if a.PackageManager != "homebrew" || a.Binary != stable {
+		t.Fatal("Homebrew wrapper metadata ignored", a.PackageManager, a.Binary)
+	}
+
+	t.Setenv("XSWAP_PACKAGE_MANAGER", "unknown")
+	t.Setenv("XSWAP_EXECUTABLE", stable)
+	a = newApp()
+	if a.PackageManager != "" || a.Binary == stable {
+		t.Fatal("unknown package manager metadata accepted", a.PackageManager, a.Binary)
 	}
 }
 

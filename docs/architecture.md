@@ -73,6 +73,19 @@ commit, so concurrent manual selection or turning auto-switch off wins.
 The monitor continues after closing the panel. After a reboot, starting `xswap`
 or `codex` restarts an enabled monitor; there is no installed login service.
 
+## Package-managed installations
+
+The Homebrew formula runs the release binary through a stable wrapper under
+Homebrew's `opt` prefix. `xswap install` points its user-level Codex links at that
+stable path, so Cellar version directories can change during upgrades without
+breaking commands. The wrapper identifies Homebrew to XSwap through restricted
+process environment metadata.
+
+Package-managed builds never offer the standalone GitHub self-update action.
+They direct upgrades back to Homebrew, keeping package ownership and rollback
+state consistent. Standalone release archives retain XSwap's confirmed,
+checksum-validated updater.
+
 ## Future providers
 
 Claude support is outside the initial scope. A future provider interface should

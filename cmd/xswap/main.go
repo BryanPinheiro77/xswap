@@ -158,6 +158,9 @@ func (a *App) run(args []string) error {
 		return err
 	case "version":
 		fmt.Printf("XSwap %s\nCommit: %s\nBuilt: %s\n", version, commit, buildDate)
+		if a.PackageManager == "homebrew" {
+			fmt.Println("Managed by: Homebrew")
+		}
 		return nil
 	case "install":
 		return a.install()

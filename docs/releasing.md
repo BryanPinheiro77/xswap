@@ -11,6 +11,10 @@ documented breaking changes; patch releases should preserve compatibility.
 4. Document compatibility changes and limitations.
 5. Merge after checks and reviews pass.
 
+When one change is released immediately, assign its version in that change's PR
+so tagging is the only remaining release step after merge. Use a separate release
+preparation PR only when collecting multiple `Unreleased` entries.
+
 The initial pipeline requires release commits to be reachable from `main`.
 For older maintained branches, merge the release commit back into `main` before
 tagging, or revise that policy through a reviewed PR.
@@ -31,18 +35,20 @@ privileges so maintainers do not automatically bypass it.
 ## Review the draft
 
 The Release workflow reruns CI on macOS, Linux, and Windows, verifies an annotated
-semantic tag on `main`, builds six archives, computes SHA-256 checksums, and
-creates a **draft GitHub release** with generated notes. Targets are macOS,
-Linux, and Windows, each for arm64 and amd64.
+semantic tag on `main`, builds six archives, computes SHA-256 checksums, renders
+the Homebrew formula, and creates a **draft GitHub release** with generated notes.
+Targets are macOS, Linux, and Windows, each for arm64 and amd64.
 
 Unix archives contain `xswap`; Windows zip files contain `xswap.exe`. Every
-archive also includes the README and license. Version, source commit, and UTC
+archive also includes the README and license. The release includes `xswap.rb` for
+the official tap. Version, source commit, and UTC
 build date are embedded; inspect them with `xswap version`. macOS binaries are
 not Apple-notarized. Checksums are not independent signed attestations.
 
-Review notes, verify checksums, and smoke-test installation on accessible
-platforms. Publish the draft through GitHub when ready. Failed jobs and draft
-creation do not automatically publish a public release.
+Review notes, verify checksums, smoke-test installation on accessible platforms,
+and validate the generated formula before copying it to the tap. Publish the
+draft through GitHub when ready. Failed jobs and draft creation do not
+automatically publish a public release.
 
 Local artifact verification:
 

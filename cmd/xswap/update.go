@@ -136,7 +136,7 @@ func (a *App) latestRelease(ctx context.Context) (githubRelease, error) {
 	return r, err
 }
 func (a *App) checkUpdate(ctx context.Context) bool {
-	if a.repository() == "" {
+	if a.PackageManager != "" || a.repository() == "" {
 		return false
 	}
 	s := a.cachedUpdate()
@@ -314,6 +314,9 @@ func (a *App) installRelease(ctx context.Context, r githubRelease) error {
 	return a.replaceInstalledBinary(binary, r.Tag)
 }
 func (a *App) updateCommand(o Options) (bool, error) {
+	if a.PackageManager == "homebrew" {
+		return false, errors.New("XSwap is managed by Homebrew; update with: brew upgrade xswap")
+	}
 	if repo := o.Values["repo"]; repo != "" {
 		if !repoPattern.MatchString(repo) {
 			return false, errors.New("repository must be OWNER/REPO")

@@ -93,6 +93,23 @@ func TestUpdateVisibilityAndVersions(t *testing.T) {
 	}
 }
 
+func TestHomebrewManagedInstallUsesPackageUpdates(t *testing.T) {
+	a := fixture(t)
+	a.PackageManager = "homebrew"
+	requests := 0
+	a.HTTPClient = &http.Client{Transport: fakeTransport(func(*http.Request) (*http.Response, error) {
+		requests++
+		return nil, errors.New("unexpected request")
+	})}
+	if a.checkUpdate(context.Background()) || requests != 0 {
+		t.Fatal("package-managed install checked GitHub releases")
+	}
+	installed, err := a.updateCommand(Options{})
+	if installed || err == nil || !strings.Contains(err.Error(), "brew upgrade xswap") || requests != 0 {
+		t.Fatal("package-managed update was not redirected to Homebrew", installed, err, requests)
+	}
+}
+
 func TestReleaseChecksCacheAndRejectDrafts(t *testing.T) {
 	a := fixture(t)
 	if err := writeJSON(filepath.Join(a.Root, "update.json"), map[string]string{"Repository": "owner/xswap"}); err != nil {
