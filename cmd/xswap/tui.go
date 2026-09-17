@@ -622,6 +622,7 @@ func (a *App) panel(mode, filter string, interval int) (string, error) {
 	defer cancel()
 	updates := make(chan panelUpdate, 32)
 	input := make(chan []byte, 16)
+	readNext := make(chan struct{}, 1)
 	inputDone := make(chan struct{})
 	go func() {
 		defer close(inputDone)
@@ -637,6 +638,12 @@ func (a *App) panel(mode, filter string, interval int) (string, error) {
 			data := append([]byte{}, buffer[:n]...)
 			select {
 			case input <- data:
+			case <-ctx.Done():
+				return
+			}
+			// Do not read ahead: the next action may hand stdin to login or a prompt.
+			select {
+			case <-readNext:
 			case <-ctx.Done():
 				return
 			}
@@ -716,11 +723,13 @@ func (a *App) panel(mode, filter string, interval int) (string, error) {
 	received := time.Time{}
 	for {
 		dirty := false
+		inputReceived := false
 		var keys []string
 		select {
 		case <-ctx.Done():
 			return "", nil
 		case data := <-input:
+			inputReceived = true
 			buffer = append(buffer, data...)
 			received = time.Now()
 			keys, buffer = parseKeys(buffer, false)
@@ -776,6 +785,9 @@ func (a *App) panel(mode, filter string, interval int) (string, error) {
 			if action == "refresh" {
 				refresh()
 			}
+		}
+		if inputReceived {
+			readNext <- struct{}{}
 		}
 		if dirty || time.Since(lastDraw) >= time.Second {
 			h, w = terminalSize()

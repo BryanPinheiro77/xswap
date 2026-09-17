@@ -9,6 +9,8 @@ tags; unreleased work stays in this section until a release is prepared.
 
 - Keep update confirmation inside the terminal panel so one `y` confirms the
   selected update without input being consumed during terminal-mode changes.
+- Stop the panel keyboard reader from reading ahead when handing input to login
+  or a prompt, preventing the first Enter from being consumed after Add account.
 
 ## v0.3.1 — 2026-09-17
 
