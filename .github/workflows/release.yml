@@ -51,5 +51,5 @@ jobs:
           GH_REPO: ${{ github.repository }}
         shell: bash
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/*.tar.gz dist/*.zip dist/checksums.txt \
+          gh release create "$GITHUB_REF_NAME" dist/*.tar.gz dist/*.zip dist/checksums.txt dist/xswap.rb \
             --verify-tag --draft --generate-notes --title "$GITHUB_REF_NAME"

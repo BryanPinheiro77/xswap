@@ -46,3 +46,6 @@ done
     shasum -a 256 ./xswap_"$VERSION"_*.tar.gz ./xswap_"$VERSION"_*.zip > checksums.txt
   fi
 )
+
+VERSION="$VERSION" CHECKSUMS="$output/checksums.txt" OUTPUT="$output/xswap.rb" REPOSITORY="$REPOSITORY" \
+  sh scripts/render-homebrew-formula.sh

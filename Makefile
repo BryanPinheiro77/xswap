@@ -4,7 +4,7 @@ COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 DATE := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.buildDate=$(DATE) -X main.releaseRepo=$(REPOSITORY)
 
-.PHONY: build install fmt check-fmt test vet check release clean
+.PHONY: build install fmt check-fmt check-packaging test vet check release clean
 build:
 	go build -trimpath -ldflags '$(LDFLAGS)' -o bin/xswap ./cmd/xswap
 install: build
@@ -13,11 +13,13 @@ fmt:
 	gofmt -w cmd/xswap/*.go
 check-fmt:
 	@test -z "$$(gofmt -l cmd/xswap/*.go)" || (gofmt -l cmd/xswap/*.go; exit 1)
+check-packaging:
+	sh scripts/test-homebrew-formula.sh
 test:
 	go test -race ./...
 vet:
 	go vet ./...
-check: check-fmt vet test build
+check: check-fmt check-packaging vet test build
 release:
 	VERSION='$(VERSION)' COMMIT='$(COMMIT)' BUILD_DATE='$(DATE)' REPOSITORY='$(REPOSITORY)' sh scripts/build-release.sh
 clean:
