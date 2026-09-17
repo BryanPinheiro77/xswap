@@ -24,10 +24,12 @@ call GitHub, or update the contributor's installed executable.
 
 ## Limits and release validation
 
-The Unix terminal integration test uses the standard `script` utility to open a
-pseudo-terminal. It selects Update version with real keyboard
-input and checks that the panel returns the action and restores the terminal.
-It uses simulated release metadata and never installs an update.
+The Unix terminal integration tests use the standard `script` utility to open a
+pseudo-terminal. They select and confirm Update version with real keyboard
+input and check that the panel returns the action and restores the terminal.
+The Add account test sends exactly one line to a prompt after leaving the panel
+and checks that no panel reader consumes that input. These tests use simulated
+release metadata and never install an update or perform an account login.
 
 The Windows CI job builds the executable and runs native integration tests for
 installation, wrappers, Codex routing, batch launchers, and safe update

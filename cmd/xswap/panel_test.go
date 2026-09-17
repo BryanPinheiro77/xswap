@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
@@ -34,9 +35,26 @@ func TestPanelActionHelperProcess(t *testing.T) {
 		t.Fatal(err)
 	}
 	fmt.Println("XSWAP_PANEL_ACTION:" + action)
+	if os.Getenv("XSWAP_TEST_ACTION") == "add" {
+		fmt.Println("XSWAP_NEXT_PROMPT")
+		answer, err := bufio.NewReader(os.Stdin).ReadString('\n')
+		if err != nil {
+			t.Fatal(err)
+		}
+		fmt.Println("XSWAP_NEXT_ANSWER:" + strings.TrimSpace(answer))
+	}
 }
 
 func TestUpdateSelectionLeavesRealTerminalPanel(t *testing.T) {
+	testPanelInputHandoff(t, "update")
+}
+
+func TestAddSelectionHandsInputToNextPrompt(t *testing.T) {
+	testPanelInputHandoff(t, "add")
+}
+
+func testPanelInputHandoff(t *testing.T, action string) {
+	t.Helper()
 	if _, err := exec.LookPath("script"); err != nil {
 		t.Fatal("terminal integration tests require the standard script utility")
 	}
@@ -54,6 +72,7 @@ func TestUpdateSelectionLeavesRealTerminalPanel(t *testing.T) {
 		cmd = exec.CommandContext(ctx, "script", "-q", "-e", "-c", quoted+" -test.run=^TestPanelActionHelperProcess$", "/dev/null")
 	}
 	cmd.Env = envWith(envWith(os.Environ(), "XSWAP_TEST_PANEL", "1"), "TERM", "xterm-256color")
+	cmd.Env = envWith(cmd.Env, "XSWAP_TEST_ACTION", action)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -89,6 +108,7 @@ func TestUpdateSelectionLeavesRealTerminalPanel(t *testing.T) {
 	var output bytes.Buffer
 	selected := false
 	confirmed := false
+	answered := false
 	for {
 		select {
 		case chunk, ok := <-chunks:
@@ -98,7 +118,11 @@ func TestUpdateSelectionLeavesRealTerminalPanel(t *testing.T) {
 			output.Write(chunk)
 			if !selected && strings.Contains(output.String(), "Update version…") {
 				// Exercise selection and confirmation in the actual raw-terminal event loop.
-				if _, err := io.WriteString(stdin, strings.Repeat("\x1b[B", 6)+"\r"); err != nil {
+				down := 6
+				if action == "add" {
+					down = 3
+				}
+				if _, err := io.WriteString(stdin, strings.Repeat("\x1b[B", down)+"\r"); err != nil {
 					t.Fatal(err)
 				}
 				selected = true
@@ -109,7 +133,19 @@ func TestUpdateSelectionLeavesRealTerminalPanel(t *testing.T) {
 				}
 				confirmed = true
 			}
-			if strings.Contains(output.String(), "XSWAP_PANEL_ACTION:update") {
+			if action == "add" && !answered && strings.Contains(output.String(), "XSWAP_NEXT_PROMPT") {
+				// Send exactly one line after the terminal is restored. A leaked raw
+				// reader would consume it and leave the next prompt blocked.
+				if _, err := io.WriteString(stdin, "first-input\n"); err != nil {
+					t.Fatal(err)
+				}
+				answered = true
+			}
+			finished := strings.Contains(output.String(), "XSWAP_PANEL_ACTION:update")
+			if action == "add" {
+				finished = strings.Contains(output.String(), "XSWAP_NEXT_ANSWER:first-input")
+			}
+			if finished {
 				if !strings.Contains(output.String(), "\x1b[?25h\x1b[?1049l") {
 					t.Fatal("terminal was not restored before returning the update action")
 				}
