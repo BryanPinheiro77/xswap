@@ -53,8 +53,8 @@ The session-continuation action requires confirmation. It writes a handoff
 request for each live managed child in the selected project, stops those child
 process groups, and lets their original wrappers copy and resume the matching
 conversation in the same terminal and working directory. The coordinator then
-copies the remaining project conversations. It never signals an unmanaged
-process or a session from another project.
+copies the other selected conversations. It never signals an unmanaged process,
+an unselected conversation, or a session from another project.
 
 Transfers parse the rollout's `session_meta`, require a UUID and an absolute
 working directory inside the project, reject symlinks and path traversal, and

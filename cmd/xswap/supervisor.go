@@ -87,6 +87,10 @@ func identifyManagedSession(home, project, cwd, knownID string, started time.Tim
 	if err != nil {
 		return codexSession{}, err
 	}
+	return identifyManagedSessionFromList(sessions, cwd, knownID, started)
+}
+
+func identifyManagedSessionFromList(sessions []codexSession, cwd, knownID string, started time.Time) (codexSession, error) {
 	if knownID != "" {
 		if session, ok := findSessionByID(sessions, knownID); ok {
 			return session, nil
@@ -233,7 +237,75 @@ func (a *App) managedForProject(project string) ([]managedCodex, error) {
 	return records, nil
 }
 
-func (a *App) planProjectHandoff(directory, target string) (projectHandoffPlan, error) {
+func (a *App) projectHandoffSource(directory string) (projectHandoffPlan, error) {
+	project, err := projectRoot(directory)
+	if err != nil {
+		return projectHandoffPlan{}, err
+	}
+	source, err := a.accountForDirectory(directory)
+	if err != nil {
+		return projectHandoffPlan{}, err
+	}
+	sourceHome, err := a.require(source)
+	if err != nil {
+		return projectHandoffPlan{}, err
+	}
+	sessions, err := sessionsInProject(sourceHome, project)
+	if err != nil {
+		return projectHandoffPlan{}, err
+	}
+	records, err := a.managedForProject(project)
+	if err != nil {
+		return projectHandoffPlan{}, err
+	}
+	managed := []managedCodex{}
+	for _, record := range records {
+		if record.Account != source {
+			continue
+		}
+		session, identifyErr := identifyManagedSessionFromList(sessions, record.CWD, record.SessionID, time.Unix(record.Started, 0))
+		if identifyErr == nil {
+			record.SessionID = session.ID
+			record.SessionPath = session.Path
+		}
+		managed = append(managed, record)
+	}
+	return projectHandoffPlan{Project: project, Source: source, Sessions: sessions, Managed: managed}, nil
+}
+
+func selectedSessionMap(sessions []codexSession) map[string]bool {
+	selected := make(map[string]bool, len(sessions))
+	for _, session := range sessions {
+		selected[session.ID] = true
+	}
+	return selected
+}
+
+func filterHandoffPlan(plan projectHandoffPlan, selected map[string]bool) (projectHandoffPlan, error) {
+	if selected == nil {
+		return plan, nil
+	}
+	sessions := []codexSession{}
+	for _, session := range plan.Sessions {
+		if selected[session.ID] {
+			sessions = append(sessions, session)
+		}
+	}
+	if len(sessions) == 0 {
+		return projectHandoffPlan{}, errors.New("select at least one conversation to continue")
+	}
+	managed := []managedCodex{}
+	for _, record := range plan.Managed {
+		if selected[record.SessionID] {
+			managed = append(managed, record)
+		}
+	}
+	plan.Sessions = sessions
+	plan.Managed = managed
+	return plan, nil
+}
+
+func (a *App) planSelectedProjectHandoff(directory, target string, selected map[string]bool) (projectHandoffPlan, error) {
 	if _, err := a.require(target); err != nil {
 		return projectHandoffPlan{}, err
 	}
@@ -244,36 +316,19 @@ func (a *App) planProjectHandoff(directory, target string) (projectHandoffPlan, 
 	if disabled(settings, target) {
 		return projectHandoffPlan{}, fmt.Errorf("account %q is disabled", target)
 	}
-	project, err := projectRoot(directory)
+	plan, err := a.projectHandoffSource(directory)
 	if err != nil {
 		return projectHandoffPlan{}, err
 	}
-	source, err := a.accountForDirectory(directory)
-	if err != nil {
-		return projectHandoffPlan{}, err
-	}
-	if source == target {
+	if plan.Source == target {
 		return projectHandoffPlan{}, errors.New("project already uses the selected account")
 	}
-	records, err := a.managedForProject(project)
-	if err != nil {
-		return projectHandoffPlan{}, err
-	}
-	managed := records[:0]
-	for _, record := range records {
-		if record.Account == source {
-			managed = append(managed, record)
-		}
-	}
-	sourceHome, err := a.require(source)
-	if err != nil {
-		return projectHandoffPlan{}, err
-	}
-	sessions, err := sessionsInProject(sourceHome, project)
-	if err != nil {
-		return projectHandoffPlan{}, err
-	}
-	return projectHandoffPlan{Project: project, Source: source, Target: target, Sessions: sessions, Managed: managed}, nil
+	plan.Target = target
+	return filterHandoffPlan(plan, selected)
+}
+
+func (a *App) planProjectHandoff(directory, target string) (projectHandoffPlan, error) {
+	return a.planSelectedProjectHandoff(directory, target, nil)
 }
 
 func (a *App) requestProjectHandoff(plan projectHandoffPlan) (projectHandoffResult, error) {
@@ -284,7 +339,8 @@ func (a *App) requestProjectHandoff(plan projectHandoffPlan) (projectHandoffResu
 		return projectHandoffResult{}, err
 	}
 	defer unlock()
-	current, err := a.planProjectHandoff(plan.Project, plan.Target)
+	selected := selectedSessionMap(plan.Sessions)
+	current, err := a.planSelectedProjectHandoff(plan.Project, plan.Target, selected)
 	if err != nil {
 		return projectHandoffResult{}, err
 	}
@@ -360,8 +416,10 @@ func (a *App) requestProjectHandoff(plan projectHandoffPlan) (projectHandoffResu
 	if err != nil {
 		return result, err
 	}
-	result.Sessions = len(sessions)
 	for _, session := range sessions {
+		if !selected[session.ID] {
+			continue
+		}
 		_, copied, copyErr := a.copySession(plan.Source, plan.Target, session)
 		if copyErr != nil {
 			return result, copyErr

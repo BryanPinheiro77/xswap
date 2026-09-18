@@ -82,23 +82,91 @@ func TestProjectSwitchPanelExplainsConsequencesBeforeAction(t *testing.T) {
 	project := t.TempDir()
 	t.Chdir(project)
 	writeTestSession(t, a.DefaultHome, "2026/09/17", "66666666-6666-4666-8666-666666666666", project, "one")
-	p := Panel{Mode: "project-switch", Records: map[string]Record{}, Width: 100, Height: 30, Cursor: 1}
+	p := Panel{Mode: "home", Records: map[string]Record{}, Width: 100, Height: 30}
 	names := a.names()
+	for index, item := range p.menu() {
+		if item == "Continue sessions with another account…" {
+			p.MenuCursor = index
+		}
+	}
 	if _, err := p.key(a, names, "enter"); err != nil {
 		t.Fatal(err)
 	}
-	if p.Mode != "confirm-project-switch" || p.Pending != "work" || p.HandoffSessions != 1 {
-		t.Fatal(p.Mode, p.Pending, p.HandoffSessions)
+	if p.Mode != "session-select" || len(p.HandoffSessions) != 1 || len(p.selectedSessions()) != 1 {
+		t.Fatal(p.Mode, len(p.HandoffSessions), len(p.selectedSessions()))
 	}
 	s, _ := a.settings()
+	selection := stripANSI(p.render(a, names, s, time.Now()))
+	if !strings.Contains(selection, "[✓]") || !strings.Contains(selection, "one") {
+		t.Fatalf("session selection omitted the selected conversation:\n%s", selection)
+	}
+	p.key(a, names, " ")
+	if len(p.selectedSessions()) != 0 {
+		t.Fatal("space did not unselect the conversation")
+	}
+	p.key(a, names, "enter")
+	if p.Mode != "session-select" || !strings.Contains(p.Message, "Select at least one") {
+		t.Fatal("continued without a selected conversation", p.Mode, p.Message)
+	}
+	p.key(a, names, " ")
+	p.key(a, names, "enter")
+	if p.Mode != "project-switch" || names[p.Cursor] != "work" {
+		t.Fatal("destination account step did not open", p.Mode, p.Cursor)
+	}
+	if _, err := p.key(a, names, "enter"); err != nil {
+		t.Fatal(err)
+	}
+	if p.Mode != "confirm-project-switch" || p.Pending != "work" || len(p.selectedSessions()) != 1 {
+		t.Fatal(p.Mode, p.Pending, len(p.selectedSessions()))
+	}
 	view := stripANSI(p.render(a, names, s, time.Now()))
-	for _, phrase := range []string{"Copy 1 project conversation", "Restart and resume 0", "Other projects"} {
+	for _, phrase := range []string{"Selected conversations: 1", "one", "Restart and resume 0", "Other projects"} {
 		if !strings.Contains(view, phrase) {
 			t.Fatalf("confirmation omitted %q:\n%s", phrase, view)
 		}
 	}
 	action, err := p.key(a, names, "y")
-	if err != nil || action != "project-handoff:work" {
+	if err != nil || !strings.HasPrefix(action, "project-handoff:work:66666666-6666-4666-8666-666666666666") {
 		t.Fatal(action, err)
+	}
+}
+
+func TestSelectedProjectHandoffCopiesOnlySelectedSessions(t *testing.T) {
+	a := fixture(t)
+	ready(t, a, "work")
+	project := t.TempDir()
+	firstID := "99999999-9999-4999-8999-999999999999"
+	secondID := "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+	writeTestSession(t, a.DefaultHome, "2026/09/17", firstID, project, "selected")
+	writeTestSession(t, a.DefaultHome, "2026/09/18", secondID, project, "not selected")
+	a.SessionIndexer = func(string, string) error { return nil }
+	plan, err := a.planSelectedProjectHandoff(project, "work", map[string]bool{firstID: true})
+	if err != nil || len(plan.Sessions) != 1 || plan.Sessions[0].ID != firstID {
+		t.Fatal(plan, err)
+	}
+	result, err := a.requestProjectHandoff(plan)
+	if err != nil || result.Copied != 1 || result.Sessions != 1 {
+		t.Fatal(result, err)
+	}
+	home, _ := a.profile("work")
+	sessions, err := sessionsInProject(home, project)
+	if err != nil || len(sessions) != 1 || sessions[0].ID != firstID {
+		t.Fatal(sessions, err)
+	}
+}
+
+func TestFilterHandoffPlanKeepsOnlyMatchingManagedSessions(t *testing.T) {
+	first := codexSession{ID: "11111111-1111-4111-8111-111111111111"}
+	second := codexSession{ID: "22222222-2222-4222-8222-222222222222"}
+	plan := projectHandoffPlan{
+		Sessions: []codexSession{first, second},
+		Managed:  []managedCodex{{SessionID: first.ID}, {SessionID: second.ID}, {SessionID: ""}},
+	}
+	filtered, err := filterHandoffPlan(plan, map[string]bool{second.ID: true})
+	if err != nil || len(filtered.Sessions) != 1 || filtered.Sessions[0].ID != second.ID || len(filtered.Managed) != 1 || filtered.Managed[0].SessionID != second.ID {
+		t.Fatal(filtered, err)
+	}
+	if _, err = filterHandoffPlan(plan, map[string]bool{}); err == nil {
+		t.Fatal("accepted a handoff without selected conversations")
 	}
 }

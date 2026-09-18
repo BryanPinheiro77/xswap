@@ -91,17 +91,18 @@ selects; Esc goes back.
 
 **Switch account…** changes the global default for new Codex processes and does
 not move conversations. **Continue sessions with another account…** pins the
-current repository, copies only that project's conversations to the selected
-account, and restarts open sessions that were launched through the supervised
-XSwap `codex` wrapper.
-The confirmation screen shows the exact conversation and managed-session counts.
-Other projects and unmanaged terminal processes are left alone.
+current repository and first lists its conversations, with every conversation
+selected initially. Use `Space` to include or exclude a conversation and `Enter`
+to choose the destination account. The final review shows the selected
+conversations and how many open managed sessions will restart. Other projects,
+unselected conversations, and unmanaged terminal processes are left alone.
 
 Project selection is stored in `.xswap-account` at the repository root; the
 nearest file wins in nested directories. Add it to `.gitignore` when account
 names are local to each contributor. Original conversation files remain in the
-source profile. XSwap copies no authentication, config, cache, or unrelated
-session data during a handoff.
+source profile. XSwap copies no authentication, config, cache, or unselected
+session data during a handoff. The CLI command `xswap project switch NAME`
+selects every conversation in the project for non-panel workflows.
 
 ## Auto-switch
 

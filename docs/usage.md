@@ -38,15 +38,21 @@ repository root, and the nearest parent file wins. Add the file to `.gitignore`
 when each contributor uses different local account names.
 
 Choose **Continue sessions with another account…** in the panel, or run
-`project switch`, for a full handoff. Before making changes, XSwap shows the
-source and destination, the number of project conversations to copy, and the
-number of running sessions it can restart. After confirmation it:
+`project switch`, for a handoff. The panel follows this sequence:
+
+1. show the current project's conversations, all selected initially;
+2. use `Space` to include or exclude conversations and `Enter` to continue;
+3. select the destination account; and
+4. review the project, source, destination, selected conversations, and number
+   of open managed sessions that will restart.
+
+After confirmation XSwap:
 
 1. pins the destination account for the repository;
-2. stops only Codex child processes supervised by the XSwap wrapper in that project;
-3. copies every conversation whose recorded working directory is the repository
-   or one of its descendants; and
-4. resumes each managed conversation in its original terminal and working directory.
+2. stops only selected Codex child processes supervised by the XSwap wrapper;
+3. copies the selected conversations; and
+4. resumes each selected managed conversation in its original terminal and
+   working directory.
 
 Other projects, terminals, and unmanaged processes are unchanged. Conversations
 remain in the source profile and identical repeated transfers are safe. XSwap
@@ -54,6 +60,9 @@ does not copy authentication, config, cache, database, or unrelated sessions.
 Sessions opened before installing a version with supervision cannot be restarted
 automatically; their conversations are still copied and can be opened with
 `codex resume` under the destination project account.
+
+The noninteractive `xswap project switch NAME` command selects every conversation
+in the project because it has no interactive session picker.
 
 Use `--path DIR` to target another repository and `--yes` for a confirmed
 noninteractive `project switch`. An explicit `CODEX_HOME` still takes priority

@@ -40,6 +40,38 @@ type sessionMeta struct {
 	Timestamp string `json:"timestamp"`
 }
 
+func previewFromEnvelope(line []byte) string {
+	var envelope sessionEnvelope
+	if json.Unmarshal(line, &envelope) != nil {
+		return ""
+	}
+	var payload struct {
+		Type    string `json:"type"`
+		Role    string `json:"role"`
+		Message string `json:"message"`
+		Content []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"content"`
+	}
+	if json.Unmarshal(envelope.Payload, &payload) != nil {
+		return ""
+	}
+	if payload.Type == "user_message" && strings.TrimSpace(payload.Message) != "" {
+		return strings.TrimSpace(payload.Message)
+	}
+	if payload.Role == "user" {
+		parts := []string{}
+		for _, item := range payload.Content {
+			if (item.Type == "input_text" || item.Type == "text") && strings.TrimSpace(item.Text) != "" {
+				parts = append(parts, strings.TrimSpace(item.Text))
+			}
+		}
+		return strings.Join(parts, " ")
+	}
+	return ""
+}
+
 func pathWithin(root, candidate string) bool {
 	relative, err := filepath.Rel(root, candidate)
 	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(os.PathSeparator)) && !filepath.IsAbs(relative)
@@ -91,7 +123,19 @@ func readSession(path string) (codexSession, error) {
 	if parseErr != nil {
 		created = info.ModTime()
 	}
-	return codexSession{ID: strings.ToLower(id), CWD: filepath.Clean(metadata.CWD), Path: path, Created: created, Updated: info.ModTime()}, nil
+	preview := ""
+	remaining := 256 << 10
+	for preview == "" && remaining > 0 {
+		line, lineErr := reader.ReadBytes('\n')
+		remaining -= len(line)
+		if len(line) > 0 {
+			preview = previewFromEnvelope(line)
+		}
+		if lineErr != nil {
+			break
+		}
+	}
+	return codexSession{ID: strings.ToLower(id), CWD: filepath.Clean(metadata.CWD), Path: path, Preview: preview, Created: created, Updated: info.ModTime()}, nil
 }
 
 func sessionsInProject(home, project string) ([]codexSession, error) {

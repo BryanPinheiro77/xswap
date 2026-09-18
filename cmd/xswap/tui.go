@@ -86,9 +86,18 @@ func (a *App) dashboard(mode, filter string, interval int) error {
 			continue
 		}
 		if strings.HasPrefix(action, "project-handoff:") {
-			target := strings.TrimPrefix(action, "project-handoff:")
+			parts := strings.SplitN(strings.TrimPrefix(action, "project-handoff:"), ":", 2)
+			target := parts[0]
+			selected := map[string]bool{}
+			if len(parts) == 2 {
+				for _, id := range strings.Split(parts[1], ",") {
+					if sessionIDPattern.MatchString(id) {
+						selected[id] = true
+					}
+				}
+			}
 			fmt.Println("Switching the project account and transferring its conversations…")
-			plan, planErr := a.planProjectHandoff(currentDirectory(), target)
+			plan, planErr := a.planSelectedProjectHandoff(currentDirectory(), target, selected)
 			if planErr != nil {
 				fmt.Println("Project switch failed:", planErr)
 			} else if result, handoffErr := a.requestProjectHandoff(plan); handoffErr != nil {
@@ -132,8 +141,10 @@ type Panel struct {
 	UpdateAvailable                       bool
 	Due                                   time.Time
 	Width, Height                         int
-	HandoffSessions, HandoffManaged       int
+	HandoffManaged                        int
 	HandoffProject, HandoffSource         string
+	HandoffSessions                       []codexSession
+	HandoffSelected, HandoffRunning       map[string]bool
 }
 
 var menuItems = []string{"Switch account…", "Continue sessions with another account…", "Watch accounts", "Auto-switch view", "Add account…", "Rename account…", "Disable / enable account…", "Remove account…", "Theme…", "Quit"}
@@ -147,6 +158,51 @@ func (p *Panel) menu() []string {
 		items = append(items, item)
 	}
 	return items
+}
+
+func (p *Panel) selectedSessions() []codexSession {
+	selected := []codexSession{}
+	for _, session := range p.HandoffSessions {
+		if p.HandoffSelected[session.ID] {
+			selected = append(selected, session)
+		}
+	}
+	return selected
+}
+
+func sessionTitle(session codexSession) string {
+	title := strings.Join(strings.Fields(session.Preview), " ")
+	if title == "" {
+		title = "Session " + session.ID[:8]
+	}
+	if runes := []rune(title); len(runes) > 72 {
+		title = string(runes[:71]) + "…"
+	}
+	return clean(title)
+}
+
+func (p *Panel) sessionLines() ([]string, int) {
+	lines := []string{}
+	chosen := 0
+	for index, session := range p.HandoffSessions {
+		if index == p.Cursor {
+			chosen = len(lines)
+		}
+		box := "[ ]"
+		if p.HandoffSelected[session.ID] {
+			box = "[✓]"
+		}
+		title := fmt.Sprintf("  %s  %d  %s", box, index+1, sessionTitle(session))
+		if index == p.Cursor {
+			title = highlight + accent(p.Theme) + " ▌ " + strings.TrimSpace(title) + reset
+		}
+		meta := session.Updated.Format("Jan 02 15:04") + "  ·  " + session.ID[:8]
+		if p.HandoffRunning[session.ID] {
+			meta += "  ·  running"
+		}
+		lines = append(lines, title, muted+"       "+meta+reset, "")
+	}
+	return lines, chosen
 }
 
 func quotaLine(item QuotaItem, width int, now time.Time) string {
@@ -319,7 +375,7 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 		rows[0] = "Resize the terminal to at least 50×20. Press q to quit."
 		return renderRows(rows, p.Width)
 	}
-	heading := map[string]string{"home": "xswap", "watch": "watching all accounts", "auto": "auto-switch view", "switch": "select account", "project-switch": "select destination account", "rename": "select account to rename", "rename-input": "rename account", "disable": "disable / enable account", "remove": "remove account", "confirm": "confirm removal", "confirm-update": "confirm update", "confirm-project-switch": "confirm session continuation"}[p.Mode]
+	heading := map[string]string{"home": "xswap", "watch": "watching all accounts", "auto": "auto-switch view", "switch": "select account", "session-select": "select sessions to continue", "project-switch": "select destination account", "rename": "select account to rename", "rename-input": "rename account", "disable": "disable / enable account", "remove": "remove account", "confirm": "confirm removal", "confirm-update": "confirm update", "confirm-project-switch": "review session continuation"}[p.Mode]
 	if p.Mode == "home" {
 		heading += " " + clean(version)
 	}
@@ -329,6 +385,9 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 	status := "querying…"
 	if !p.Busy {
 		status = fmt.Sprintf("refresh in %ds", max(0, int(p.Due.Sub(now).Seconds())))
+	}
+	if p.Mode == "session-select" {
+		status = fmt.Sprintf("%d of %d selected", len(p.selectedSessions()), len(p.HandoffSessions))
 	}
 	rows[0] = muted + "  " + heading + "  ·  " + status + reset
 	if p.Mode == "home" {
@@ -342,6 +401,9 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 		}
 	}
 	lines, chosen := p.accountLines(a, names, s, now)
+	if p.Mode == "session-select" {
+		lines, chosen = p.sessionLines()
+	}
 	if p.Mode == "auto" {
 		lines = p.autoLines(a, s, now)
 	}
@@ -356,10 +418,16 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 		lines = []string{"", bold + "  Install the available XSwap update?" + reset, muted + "  The update will be installed with " + method + "." + reset, "", accent(p.Theme) + "  y Confirm update   esc Cancel" + reset}
 	}
 	if p.Mode == "confirm-project-switch" {
-		lines = []string{"", bold + "  Switch " + clean(filepath.Base(p.HandoffProject)) + " from " + clean(a.displayName(p.HandoffSource)) + " to " + clean(a.displayName(p.Pending)) + "?" + reset,
-			muted + fmt.Sprintf("  Copy %d project conversation(s) to the destination account.", p.HandoffSessions) + reset,
-			muted + fmt.Sprintf("  Restart and resume %d currently managed Codex session(s).", p.HandoffManaged) + reset,
-			muted + "  Other projects and unmanaged terminal processes are not changed." + reset, "", accent(p.Theme) + "  y Confirm project switch   esc Cancel" + reset}
+		selected := p.selectedSessions()
+		lines = []string{"", bold + "  Continue sessions from " + clean(a.displayName(p.HandoffSource)) + " with " + clean(a.displayName(p.Pending)) + "?" + reset,
+			muted + "  Project: " + clean(filepath.Base(p.HandoffProject)) + reset,
+			muted + fmt.Sprintf("  Selected conversations: %d", len(selected)) + reset}
+		for _, session := range selected {
+			lines = append(lines, "    • "+sessionTitle(session))
+		}
+		lines = append(lines,
+			muted+fmt.Sprintf("  Restart and resume %d currently managed Codex session(s).", p.HandoffManaged)+reset,
+			muted+"  Other projects and unselected sessions are not changed."+reset, "", accent(p.Theme)+"  y Confirm continuation   esc Back"+reset)
 	}
 	if p.Mode == "rename-input" {
 		lines = append(lines, "", bold+"  Display name: "+p.Input+"█"+reset, muted+"  Type a name, or leave it empty to use the e-mail. Enter saves; Esc cancels."+reset)
@@ -369,7 +437,7 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 		menuItems := p.menu()
 		available = max(1, p.Height-len(menuItems)-11)
 	}
-	if p.Mode == "switch" || p.Mode == "project-switch" || p.Mode == "disable" || p.Mode == "remove" {
+	if p.Mode == "switch" || p.Mode == "session-select" || p.Mode == "project-switch" || p.Mode == "disable" || p.Mode == "remove" {
 		if chosen < p.Offset || chosen >= p.Offset+available {
 			p.Offset = chosen
 		}
@@ -403,6 +471,9 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 	if p.Mode == "rename-input" {
 		footer = "  Type display name   enter Save   backspace Delete   esc Cancel   q Quit"
 	}
+	if p.Mode == "session-select" {
+		footer = "  space Select / unselect   enter Continue   esc Back   q Quit"
+	}
 	rows[p.Height-2] = accent(p.Theme) + footer + reset
 	rows[p.Height-1] = muted + "  ↑/↓ Navigate  ·  Enter Select  ·  Percentages show quota usage" + reset
 	return renderRows(rows, p.Width)
@@ -432,6 +503,17 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 			p.Input = ""
 			return "", nil
 		}
+		if p.Mode == "confirm-project-switch" {
+			p.Mode = "project-switch"
+			p.Offset = 0
+			return "", nil
+		}
+		if p.Mode == "project-switch" {
+			p.Mode = "session-select"
+			p.Offset = 0
+			p.Cursor = 0
+			return "", nil
+		}
 		p.Mode = "home"
 		p.Offset = 0
 		p.Pending = ""
@@ -450,8 +532,12 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 		return "", nil
 	}
 	if p.Mode == "confirm-project-switch" {
-		if key == "y" {
-			return "project-handoff:" + p.Pending, nil
+		if key == "y" || key == "Y" {
+			ids := []string{}
+			for _, session := range p.selectedSessions() {
+				ids = append(ids, session.ID)
+			}
+			return "project-handoff:" + p.Pending + ":" + strings.Join(ids, ","), nil
 		}
 		return "", nil
 	}
@@ -485,6 +571,11 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 		return "", nil
 	}
 	switch key {
+	case " ":
+		if p.Mode == "session-select" && len(p.HandoffSessions) > 0 {
+			id := p.HandoffSessions[p.Cursor].ID
+			p.HandoffSelected[id] = !p.HandoffSelected[id]
+		}
 	case "s":
 		p.Mode = "switch"
 		p.Offset = 0
@@ -524,6 +615,8 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 	case "down", "j":
 		if p.Mode == "home" {
 			p.MenuCursor = (p.MenuCursor + 1) % len(p.menu())
+		} else if p.Mode == "session-select" {
+			p.Cursor = min(p.Cursor+1, len(p.HandoffSessions)-1)
 		} else if p.Mode == "switch" || p.Mode == "project-switch" || p.Mode == "rename" || p.Mode == "disable" || p.Mode == "remove" {
 			p.Cursor = min(p.Cursor+1, len(names)-1)
 		} else {
@@ -532,6 +625,8 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 	case "up", "k":
 		if p.Mode == "home" {
 			p.MenuCursor = (p.MenuCursor + len(p.menu()) - 1) % len(p.menu())
+		} else if p.Mode == "session-select" {
+			p.Cursor = max(0, p.Cursor-1)
 		} else if p.Mode == "switch" || p.Mode == "project-switch" || p.Mode == "rename" || p.Mode == "disable" || p.Mode == "remove" {
 			p.Cursor = max(0, p.Cursor-1)
 		} else {
@@ -555,7 +650,29 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 			case "Switch account…":
 				p.Mode = "switch"
 			case "Continue sessions with another account…":
-				p.Mode = "project-switch"
+				plan, err := a.projectHandoffSource(currentDirectory())
+				if err != nil {
+					p.Message = err.Error()
+					return "", nil
+				}
+				if len(plan.Sessions) == 0 {
+					p.Message = "No conversations were found for the current project."
+					return "", nil
+				}
+				p.HandoffProject = plan.Project
+				p.HandoffSource = plan.Source
+				p.HandoffSessions = plan.Sessions
+				p.HandoffSelected = map[string]bool{}
+				p.HandoffRunning = map[string]bool{}
+				for _, session := range plan.Sessions {
+					p.HandoffSelected[session.ID] = true
+				}
+				for _, record := range plan.Managed {
+					if record.SessionID != "" {
+						p.HandoffRunning[record.SessionID] = true
+					}
+				}
+				p.Mode = "session-select"
 			case "Watch accounts":
 				p.Mode = "watch"
 			case "Auto-switch view":
@@ -576,6 +693,22 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 			}
 			p.Offset = 0
 			p.Cursor = 0
+		} else if p.Mode == "session-select" {
+			if len(p.selectedSessions()) == 0 {
+				p.Message = "Select at least one conversation to continue."
+			} else if len(names) < 2 {
+				p.Message = "Add another account before continuing these conversations."
+			} else {
+				p.Mode = "project-switch"
+				p.Cursor = 0
+				for index, name := range names {
+					if name != p.HandoffSource {
+						p.Cursor = index
+						break
+					}
+				}
+				p.Offset = 0
+			}
 		} else if p.Mode == "switch" {
 			if err := a.selectAccount(names[p.Cursor]); err != nil {
 				p.Message = err.Error()
@@ -588,14 +721,13 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 				p.Offset = 0
 			}
 		} else if p.Mode == "project-switch" {
-			plan, err := a.planProjectHandoff(currentDirectory(), names[p.Cursor])
+			plan, err := a.planSelectedProjectHandoff(currentDirectory(), names[p.Cursor], p.HandoffSelected)
 			if err != nil {
 				p.Message = err.Error()
 			} else {
 				p.Pending = names[p.Cursor]
 				p.HandoffProject = plan.Project
 				p.HandoffSource = plan.Source
-				p.HandoffSessions = len(plan.Sessions)
 				p.HandoffManaged = len(plan.Managed)
 				p.Mode = "confirm-project-switch"
 				p.Offset = 0
@@ -828,7 +960,11 @@ func (a *App) panel(mode, filter string, interval int) (string, error) {
 		if filter != "" {
 			names = []string{filter}
 		}
-		p.Cursor = min(p.Cursor, len(names)-1)
+		if p.Mode == "session-select" {
+			p.Cursor = min(p.Cursor, len(p.HandoffSessions)-1)
+		} else {
+			p.Cursor = min(p.Cursor, len(names)-1)
+		}
 		for _, key := range keys {
 			if p.Mode == "confirm" && (key == "y" || key == "Y") {
 				fetchCancel()
