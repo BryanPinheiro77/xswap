@@ -101,8 +101,23 @@ func TestUpdateVisibilityAndVersions(t *testing.T) {
 		t.Fatalf("cancelled update selection: %s %s %v", p.Mode, action, err)
 	}
 	a := fixture(t)
-	if a.checkUpdate(context.Background()) {
-		t.Fatal("unconfigured repository has update")
+	if a.repository() != defaultReleaseRepo {
+		t.Fatal("source build lost the default release repository")
+	}
+	a.HTTPClient = &http.Client{Transport: fakeTransport(func(r *http.Request) (*http.Response, error) {
+		if !strings.Contains(r.URL.Path, defaultReleaseRepo) {
+			return nil, errors.New("checked an unexpected repository: " + r.URL.Path)
+		}
+		return &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"tag_name":"v999.0.0"}`))}, nil
+	})}
+	if !a.checkUpdate(context.Background()) {
+		t.Fatal("source build without an injected repository found no update")
+	}
+	if err := writeJSON(filepath.Join(a.Root, "update.json"), map[string]string{"Repository": "owner/xswap"}); err != nil {
+		t.Fatal(err)
+	}
+	if a.repository() != "owner/xswap" {
+		t.Fatal("configured repository did not override the default")
 	}
 }
 

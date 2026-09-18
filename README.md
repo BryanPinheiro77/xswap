@@ -47,6 +47,10 @@ make install
 xswap
 ```
 
+Source builds report `dev` as their version and still detect published releases,
+so **Update version…** appears in the panel once a newer stable release exists.
+Installing it replaces the built executable with the official release binary.
+
 On Windows PowerShell:
 
 ```powershell

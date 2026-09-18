@@ -84,5 +84,7 @@ Checksums protect download integrity; they do not replace trust in release
 maintainers or protect against a compromised repository.
 
 Local builds can embed the repository with
-`make release VERSION=v0.1.0 REPOSITORY=OWNER/xswap`. Clients check periodically
+`make release VERSION=v0.1.0 REPOSITORY=OWNER/xswap`. Without it they fall back
+to the canonical `defaultReleaseRepo` in `cmd/xswap/update.go`, which forks must
+change or override with `xswap update --repo OWNER/xswap`. Clients check periodically
 while the panel runs and install only after explicit confirmation.

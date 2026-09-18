@@ -191,8 +191,10 @@ GitHub check, and `xswap update` to install with confirmation. Automation can us
 Drafts and prereleases are excluded. Failed checks do not show an update.
 
 Checks are cached for 15 minutes. The CLI check always refreshes that cache.
-Source builds need `xswap update --repo OWNER/xswap --check` once; release binaries
-embed the repository. Updates support macOS, Linux, and Windows on arm64 and
+Release binaries embed their repository and source builds fall back to the
+canonical `BryanPinheiro77/xswap`, so a `git clone` installation detects updates
+without extra setup. Use `xswap update --repo OWNER/xswap --check` once to point
+either at a fork; the stored choice takes precedence over the built-in default. Updates support macOS, Linux, and Windows on arm64 and
 amd64. Account data is preserved. Restart existing XSwap processes and
 an enabled auto-switch daemon after a CLI update.
 
