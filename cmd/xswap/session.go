@@ -85,7 +85,7 @@ func userSessionPreview(message string) string {
 		"<plugins_instructions>",
 		"<turn_aborted>",
 		"# AGENTS.md instructions for ",
-		"The following is the Codex agent history whose request action",
+		"The following is the Codex agent history",
 	}
 	for _, prefix := range technicalPrefixes {
 		if strings.HasPrefix(message, prefix) {

@@ -404,6 +404,9 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 			}
 		}
 	}
+	if p.Mode == "session-select" {
+		rows[1] = muted + "  from " + clean(a.displayName(p.HandoffSource)) + "  ·  project " + clean(filepath.Base(p.HandoffProject)) + reset
+	}
 	lines, chosen := p.accountLines(a, names, s, now)
 	if p.Mode == "session-select" {
 		lines, chosen = p.sessionLines()

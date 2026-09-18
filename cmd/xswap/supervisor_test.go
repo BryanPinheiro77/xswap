@@ -196,7 +196,7 @@ func TestProjectSwitchPanelExplainsConsequencesBeforeAction(t *testing.T) {
 	}
 	s, _ := a.settings()
 	selection := stripANSI(p.render(a, names, s, time.Now()))
-	if !strings.Contains(selection, "[✓]") || !strings.Contains(selection, "one") {
+	if !strings.Contains(selection, "[✓]") || !strings.Contains(selection, "one") || !strings.Contains(selection, "from default") {
 		t.Fatalf("session selection omitted the selected conversation:\n%s", selection)
 	}
 	p.key(a, names, " ")
