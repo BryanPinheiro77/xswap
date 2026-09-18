@@ -288,7 +288,7 @@ func safeDestinationParent(root, parent string) error {
 	return nil
 }
 
-func (a *App) syncExistingSession(target string, session codexSession, destination string, destinationInfo os.FileInfo) (bool, error) {
+func (a *App) syncExistingSession(session codexSession, destination string, destinationInfo os.FileInfo) (bool, error) {
 	existing, err := readSession(destination)
 	if err != nil || existing.ID != session.ID {
 		return false, errors.New("existing destination session is invalid")
@@ -314,22 +314,12 @@ func (a *App) syncExistingSession(target string, session codexSession, destinati
 	if destinationInfo.Size() == sourceInfo.Size() {
 		return false, nil
 	}
-	previous, err := os.ReadFile(destination)
-	if err != nil {
-		return false, err
-	}
 	data, err := os.ReadFile(session.Path)
 	if err != nil {
 		return false, err
 	}
 	if err = atomicWrite(destination, data); err != nil {
 		return false, err
-	}
-	if err = a.indexTransferredSession(target, session.ID); err != nil {
-		if restoreErr := atomicWrite(destination, previous); restoreErr != nil {
-			return false, fmt.Errorf("index updated session: %v; restore previous session: %w", err, restoreErr)
-		}
-		return false, fmt.Errorf("index updated session: %w", err)
 	}
 	return true, nil
 }
@@ -363,7 +353,7 @@ func (a *App) copySession(source, target string, session codexSession) (string, 
 		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
 			return "", false, errors.New("existing destination session is not a regular file")
 		}
-		updated, syncErr := a.syncExistingSession(target, session, destination, info)
+		updated, syncErr := a.syncExistingSession(session, destination, info)
 		if syncErr != nil {
 			return "", false, syncErr
 		}
@@ -378,10 +368,6 @@ func (a *App) copySession(source, target string, session codexSession) (string, 
 	if err = atomicWrite(destination, data); err != nil {
 		return "", false, err
 	}
-	if err = a.indexTransferredSession(target, session.ID); err != nil {
-		_ = os.Remove(destination)
-		return "", false, fmt.Errorf("index transferred session: %w", err)
-	}
 	return destination, true, nil
 }
 
@@ -391,25 +377,11 @@ func (a *App) indexTransferredSession(account, id string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	cli, args, env, err := a.command(account, []string{"migrate-rollouts", "--apply", "--thread", id, "--json"}, false)
-	if err != nil {
+	return a.withAppServer(ctx, account, func(request appServerRequest) error {
+		_, err := request(2, "thread/resume", map[string]any{
+			"threadId":     id,
+			"excludeTurns": true,
+		})
 		return err
-	}
-	cmd := processCommand(cli, args...)
-	setProcessEnvironment(cmd, env)
-	cmd.Stdout = io.Discard
-	cmd.Stderr = io.Discard
-	if err = cmd.Start(); err != nil {
-		return err
-	}
-	done := make(chan error, 1)
-	go func() { done <- cmd.Wait() }()
-	select {
-	case err = <-done:
-		return err
-	case <-ctx.Done():
-		_ = terminateProcess(cmd, true)
-		<-done
-		return ctx.Err()
-	}
+	})
 }

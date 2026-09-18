@@ -57,7 +57,14 @@ func TestProjectHandoffCopiesAllProjectSessionsAndPinsTarget(t *testing.T) {
 	}
 	writeTestSession(t, a.DefaultHome, "2026/09/17", "44444444-4444-4444-8444-444444444444", project, "one")
 	writeTestSession(t, a.DefaultHome, "2026/09/18", "55555555-5555-4555-8555-555555555555", filepath.Join(project, "nested"), "two")
-	a.SessionIndexer = func(string, string) error { return nil }
+	indexed := map[string]bool{}
+	a.SessionIndexer = func(account, id string) error {
+		if account != "work" {
+			t.Fatalf("indexed account %q, want work", account)
+		}
+		indexed[id] = true
+		return nil
+	}
 	plan, err := a.planProjectHandoff(project, "work")
 	if err != nil || len(plan.Sessions) != 2 || len(plan.Managed) != 0 {
 		t.Fatal(plan, err)
@@ -65,6 +72,9 @@ func TestProjectHandoffCopiesAllProjectSessionsAndPinsTarget(t *testing.T) {
 	result, err := a.requestProjectHandoff(plan)
 	if err != nil || result.Copied != 2 || result.Restarted != 0 {
 		t.Fatal(result, err)
+	}
+	if len(indexed) != 2 {
+		t.Fatal("did not register every transferred session", indexed)
 	}
 	if selected, err := a.accountForDirectory(project); err != nil || selected != "work" {
 		t.Fatal(selected, err)
@@ -114,7 +124,11 @@ func TestHomeSessionHandoffUsesGlobalSelectionWithoutProjectPin(t *testing.T) {
 	t.Setenv("USERPROFILE", home)
 	a := fixture(t)
 	ready(t, a, "work")
-	a.SessionIndexer = func(string, string) error { return nil }
+	indexed := ""
+	a.SessionIndexer = func(account, id string) error {
+		indexed = account + ":" + id
+		return nil
+	}
 	writeTestSession(t, a.DefaultHome, "2026/09/18", "ffffffff-ffff-4fff-8fff-ffffffffffff", home, "standalone conversation")
 	plan, err := a.planProjectHandoff(home, "work")
 	if err != nil {
@@ -123,6 +137,9 @@ func TestHomeSessionHandoffUsesGlobalSelectionWithoutProjectPin(t *testing.T) {
 	result, err := a.requestProjectHandoff(plan)
 	if err != nil || !result.Global || result.Copied != 1 {
 		t.Fatal(result, err)
+	}
+	if indexed != "work:ffffffff-ffff-4fff-8fff-ffffffffffff" {
+		t.Fatal("standalone session was not registered", indexed)
 	}
 	if a.selected() != "work" {
 		t.Fatal("home handoff did not update the global account")
@@ -203,7 +220,11 @@ func TestSelectedProjectHandoffCopiesOnlySelectedSessions(t *testing.T) {
 	secondID := "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 	writeTestSession(t, a.DefaultHome, "2026/09/17", firstID, project, "selected")
 	writeTestSession(t, a.DefaultHome, "2026/09/18", secondID, project, "not selected")
-	a.SessionIndexer = func(string, string) error { return nil }
+	indexed := []string{}
+	a.SessionIndexer = func(account, id string) error {
+		indexed = append(indexed, account+":"+id)
+		return nil
+	}
 	plan, err := a.planSelectedProjectHandoff(project, "work", map[string]bool{firstID: true})
 	if err != nil || len(plan.Sessions) != 1 || plan.Sessions[0].ID != firstID {
 		t.Fatal(plan, err)
@@ -211,6 +232,9 @@ func TestSelectedProjectHandoffCopiesOnlySelectedSessions(t *testing.T) {
 	result, err := a.requestProjectHandoff(plan)
 	if err != nil || result.Copied != 1 || result.Sessions != 1 {
 		t.Fatal(result, err)
+	}
+	if len(indexed) != 1 || indexed[0] != "work:"+firstID {
+		t.Fatal("registered the wrong selection", indexed)
 	}
 	home, _ := a.profile("work")
 	sessions, err := sessionsInProject(home, project)

@@ -400,9 +400,9 @@ func (a *App) requestProjectHandoff(plan projectHandoffPlan) (projectHandoffResu
 			return result, fmt.Errorf("destination account %q already has a managed Codex process in this project", plan.Target)
 		}
 	}
-	// Prepare and index every selected conversation before changing the project
-	// account or stopping a terminal. Active source rollouts can append after
-	// this snapshot; their supervisors safely fast-forward them once stopped.
+	// Prepare every selected conversation before changing the project account or
+	// stopping a terminal. Active source rollouts can append after this snapshot;
+	// their supervisors safely fast-forward them once stopped.
 	changed := map[string]bool{}
 	for _, session := range plan.Sessions {
 		_, copied, copyErr := a.copySession(plan.Source, plan.Target, session)
@@ -492,6 +492,27 @@ func (a *App) requestProjectHandoff(plan projectHandoffPlan) (projectHandoffResu
 		}
 		if copied {
 			changed[session.ID] = true
+		}
+	}
+	activeTargetSessions := map[string]bool{}
+	currentManaged, managedErr := a.managedForProject(plan.Project)
+	if managedErr != nil {
+		return result, managedErr
+	}
+	for _, record := range currentManaged {
+		if record.Account == plan.Target && record.SessionID != "" {
+			activeTargetSessions[record.SessionID] = true
+		}
+	}
+	// A resumed managed process registers its own thread metadata. Register the
+	// remaining copied conversations through Codex's app-server so they also
+	// appear in the destination account's resume picker.
+	for _, session := range plan.Sessions {
+		if activeTargetSessions[session.ID] {
+			continue
+		}
+		if err = a.indexTransferredSession(plan.Target, session.ID); err != nil {
+			return result, fmt.Errorf("register transferred session %s: %w", session.ID, err)
 		}
 	}
 	for _, session := range plan.Sessions {

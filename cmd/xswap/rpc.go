@@ -196,34 +196,31 @@ type rpcReply struct {
 	Error  json.RawMessage `json:"error"`
 }
 
-func (a *App) readLimits(parent context.Context, name string) (Record, error) {
-	ctx, cancel := context.WithTimeout(parent, 20*time.Second)
+type appServerRequest func(id int, method string, params any) (json.RawMessage, error)
+
+func (a *App) withAppServer(parent context.Context, name string, run func(appServerRequest) error) error {
+	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
-	unlock, err := a.lock(ctx, filepath.Join("locks", name+".lock"))
-	if err != nil {
-		return Record{}, err
-	}
-	defer unlock()
 	cli, args, env, err := a.command(name, []string{"app-server", "--stdio"}, false)
 	if err != nil {
-		return Record{}, err
+		return err
 	}
 	cmd := processCommand(cli, args...)
 	setProcessEnvironment(cmd, env)
 	configureProcess(cmd)
 	input, err := cmd.StdinPipe()
 	if err != nil {
-		return Record{}, err
+		return err
 	}
 	output, err := cmd.StdoutPipe()
 	if err != nil {
 		input.Close()
-		return Record{}, err
+		return err
 	}
 	if err = cmd.Start(); err != nil {
 		input.Close()
 		output.Close()
-		return Record{}, err
+		return err
 	}
 	replies := make(chan rpcReply, 16)
 	ended := make(chan struct{})
@@ -249,7 +246,7 @@ func (a *App) readLimits(parent context.Context, name string) (Record, error) {
 		input.Close()
 		terminateProcess(cmd, false)
 		done := make(chan struct{})
-		go func() { cmd.Wait(); close(done) }()
+		go func() { _ = cmd.Wait(); close(done) }()
 		select {
 		case <-done:
 		case <-time.After(2 * time.Second):
@@ -262,65 +259,87 @@ func (a *App) readLimits(parent context.Context, name string) (Record, error) {
 		<-scanDone
 	}()
 	send := func(value any) error {
-		data, err := json.Marshal(value)
-		if err != nil {
-			return err
+		data, marshalErr := json.Marshal(value)
+		if marshalErr != nil {
+			return marshalErr
 		}
-		_, err = input.Write(append(data, '\n'))
-		return err
+		_, writeErr := input.Write(append(data, '\n'))
+		return writeErr
 	}
 	request := func(id int, method string, params any) (json.RawMessage, error) {
 		message := map[string]any{"id": id, "method": method}
 		if params != nil {
 			message["params"] = params
 		}
-		if err := send(message); err != nil {
-			return nil, errors.New("Codex ended the query; check your login with xswap status")
+		if sendErr := send(message); sendErr != nil {
+			return nil, errors.New("Codex app server ended unexpectedly")
 		}
 		for {
 			select {
 			case <-ctx.Done():
-				return nil, fmt.Errorf("quota query cancelled or timed out: %w", ctx.Err())
+				return nil, ctx.Err()
 			case <-ended:
-				return nil, errors.New("Codex ended the query; check your login with xswap status")
+				return nil, errors.New("Codex app server ended unexpectedly")
 			case reply := <-replies:
-				if reply.ID == id && reply.Method == "" {
-					if len(reply.Error) > 0 && string(reply.Error) != "null" {
-						return nil, errors.New("Codex could not query this account; check login with xswap status")
-					}
-					return reply.Result, nil
+				if reply.ID != id || reply.Method != "" {
+					continue
 				}
+				if len(reply.Error) > 0 && string(reply.Error) != "null" {
+					var failure struct {
+						Message string `json:"message"`
+					}
+					if json.Unmarshal(reply.Error, &failure) == nil && clean(failure.Message) != "" {
+						return nil, errors.New(clean(failure.Message))
+					}
+					return nil, errors.New("Codex app server rejected the request")
+				}
+				return reply.Result, nil
 			}
 		}
 	}
-	if _, err = request(1, "initialize", map[string]any{"clientInfo": map[string]string{"name": "codex_swap", "title": "XSwap", "version": "1.0.0"}}); err != nil {
-		return Record{}, err
+	if _, err = request(1, "initialize", map[string]any{"clientInfo": map[string]string{"name": "codex_swap", "title": "XSwap", "version": version}}); err != nil {
+		return err
 	}
 	if err = send(map[string]string{"method": "initialized"}); err != nil {
-		return Record{}, err
+		return errors.New("Codex app server ended unexpectedly")
 	}
-	data, err := request(2, "account/read", map[string]bool{"refreshToken": false})
+	return run(request)
+}
+
+func (a *App) readLimits(parent context.Context, name string) (Record, error) {
+	ctx, cancel := context.WithTimeout(parent, 20*time.Second)
+	defer cancel()
+	unlock, err := a.lock(ctx, filepath.Join("locks", name+".lock"))
 	if err != nil {
 		return Record{}, err
 	}
+	defer unlock()
 	var accountResponse struct {
 		Account *Account `json:"account"`
 	}
-	if err = json.Unmarshal(data, &accountResponse); err != nil {
-		return Record{}, errors.New("invalid account response")
-	}
-	if accountResponse.Account == nil {
-		return Record{}, fmt.Errorf("login pending; run: xswap login %s", name)
-	}
-	if accountResponse.Account.Type != "chatgpt" {
-		return Record{}, errors.New("subscription quotas require a ChatGPT account; API keys are not supported")
-	}
-	data, err = request(3, "account/rateLimits/read", nil)
+	var limitsData json.RawMessage
+	err = a.withAppServer(ctx, name, func(request appServerRequest) error {
+		accountData, requestErr := request(2, "account/read", map[string]bool{"refreshToken": false})
+		if requestErr != nil {
+			return requestErr
+		}
+		if json.Unmarshal(accountData, &accountResponse) != nil {
+			return errors.New("invalid account response")
+		}
+		if accountResponse.Account == nil {
+			return fmt.Errorf("login pending; run: xswap login %s", name)
+		}
+		if accountResponse.Account.Type != "chatgpt" {
+			return errors.New("subscription quotas require a ChatGPT account; API keys are not supported")
+		}
+		limitsData, err = request(3, "account/rateLimits/read", nil)
+		return err
+	})
 	if err != nil {
 		return Record{}, err
 	}
 	var limits Limits
-	if err = json.Unmarshal(data, &limits); err != nil {
+	if err = json.Unmarshal(limitsData, &limits); err != nil {
 		return Record{}, errors.New("invalid quota response")
 	}
 	record := Record{Account: *accountResponse.Account, Limits: limits}

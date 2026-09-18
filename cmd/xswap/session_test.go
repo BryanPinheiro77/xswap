@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -59,17 +58,9 @@ func TestSessionsInProjectAndTransfer(t *testing.T) {
 	if err != nil || len(sessions) != 2 || sessions[0].ID != secondID || sessions[1].ID != firstID {
 		t.Fatal(sessions, err)
 	}
-	indexed := []string{}
-	a.SessionIndexer = func(account, id string) error {
-		indexed = append(indexed, account+":"+id)
-		return nil
-	}
 	destination, copied, err := a.copySession("default", "work", sessions[0])
 	if err != nil || !copied || !strings.Contains(destination, filepath.Join("profiles", "work", "sessions")) {
 		t.Fatal(destination, copied, err)
-	}
-	if len(indexed) != 1 || indexed[0] != "work:"+secondID {
-		t.Fatal(indexed)
 	}
 	if _, copied, err = a.copySession("default", "work", sessions[0]); err != nil || copied {
 		t.Fatal("identical transfer was not idempotent", copied, err)
@@ -79,6 +70,15 @@ func TestSessionsInProjectAndTransfer(t *testing.T) {
 	}
 	if _, _, err = a.copySession("default", "work", sessions[0]); err == nil {
 		t.Fatal("overwrote conflicting destination")
+	}
+}
+
+func TestIndexTransferredSessionUsesThreadResume(t *testing.T) {
+	a := fixture(t)
+	helperCLI(t, a)
+	id := "abababab-abab-4bab-8bab-abababababab"
+	if err := a.indexTransferredSession("default", id); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -101,7 +101,6 @@ func appendSessionEvent(t *testing.T, path, message string) {
 func TestSessionTransferFastForwardsRoundTripAndRejectsDivergence(t *testing.T) {
 	a := fixture(t)
 	ready(t, a, "work")
-	a.SessionIndexer = func(string, string) error { return nil }
 	project := t.TempDir()
 	id := "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 	originalPath := writeTestSession(t, a.DefaultHome, "2026/09/17", id, project, "start")
@@ -148,40 +147,6 @@ func TestSessionTransferFastForwardsRoundTripAndRejectsDivergence(t *testing.T) 
 	}
 }
 
-func TestSessionFastForwardRestoresDestinationWhenIndexingFails(t *testing.T) {
-	a := fixture(t)
-	ready(t, a, "work")
-	a.SessionIndexer = func(string, string) error { return nil }
-	project := t.TempDir()
-	id := "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
-	sourcePath := writeTestSession(t, a.DefaultHome, "2026/09/17", id, project, "start")
-	session, err := readSession(sourcePath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	destination, _, err := a.copySession("default", "work", session)
-	if err != nil {
-		t.Fatal(err)
-	}
-	before, err := os.ReadFile(destination)
-	if err != nil {
-		t.Fatal(err)
-	}
-	appendSessionEvent(t, sourcePath, "new message")
-	session, err = readSession(sourcePath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	a.SessionIndexer = func(string, string) error { return errors.New("index failed") }
-	if _, _, err = a.copySession("default", "work", session); err == nil || !strings.Contains(err.Error(), "index updated session") {
-		t.Fatal("ignored update indexing failure", err)
-	}
-	after, err := os.ReadFile(destination)
-	if err != nil || string(after) != string(before) {
-		t.Fatal("failed to restore destination after indexing error", err)
-	}
-}
-
 func assertSameFile(t *testing.T, left, right string) {
 	t.Helper()
 	leftData, leftErr := os.ReadFile(left)
@@ -200,15 +165,6 @@ func TestSessionTransferRejectsUnsafeFilesAndCleansFailure(t *testing.T) {
 	session, err := readSession(path)
 	if err != nil {
 		t.Fatal(err)
-	}
-	a.SessionIndexer = func(string, string) error { return fmt.Errorf("index failed") }
-	destination, _, err := a.copySession("default", "work", session)
-	if err == nil || destination != "" {
-		t.Fatal("ignored indexing failure", destination, err)
-	}
-	work, _ := a.profile("work")
-	if exists(filepath.Join(work, "sessions", "2026/09/17", filepath.Base(path))) {
-		t.Fatal("partial destination remains")
 	}
 	outside := filepath.Join(t.TempDir(), "outside.jsonl")
 	if err = os.WriteFile(outside, []byte("outside"), 0600); err != nil {
