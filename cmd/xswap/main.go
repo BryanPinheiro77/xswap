@@ -382,7 +382,7 @@ func (a *App) projectCommand(args []string) error {
 		if handoffErr != nil {
 			return handoffErr
 		}
-		printProjectHandoffResult(result)
+		printProjectHandoffResult(a, result)
 		return nil
 	case "clear":
 		if len(o.Names) != 0 {
@@ -409,11 +409,20 @@ func (a *App) projectCommand(args []string) error {
 	}
 }
 
-func printProjectHandoffResult(result projectHandoffResult) {
+func handoffAccountLabel(a *App, name string) string {
+	label := a.displayName(name)
+	if label == name {
+		return name
+	}
+	return fmt.Sprintf("%s (%s)", label, name)
+}
+
+func printProjectHandoffResult(a *App, result projectHandoffResult) {
+	fmt.Printf("Account handoff: %s → %s.\n", handoffAccountLabel(a, result.Source), handoffAccountLabel(a, result.Target))
 	if result.Global {
-		fmt.Printf("Global account for unpinned directories is now %s.\n", result.Target)
+		fmt.Println("Global selection updated for unpinned directories.")
 	} else {
-		fmt.Printf("Project %s now uses account %s.\n", result.Project, result.Target)
+		fmt.Printf("Project %s now uses %s.\n", result.Project, handoffAccountLabel(a, result.Target))
 	}
 	fmt.Printf("Conversations: %d copied, %d already present.\n", result.Copied, result.Already)
 	if result.Restarted > 0 {

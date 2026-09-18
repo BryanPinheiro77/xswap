@@ -103,7 +103,7 @@ func (a *App) dashboard(mode, filter string, interval int) error {
 			} else if result, handoffErr := a.requestProjectHandoff(plan); handoffErr != nil {
 				fmt.Println("Project switch failed:", handoffErr)
 			} else {
-				printProjectHandoffResult(result)
+				printProjectHandoffResult(a, result)
 			}
 			fmt.Print("\nPress Enter to return to the menu.")
 			bufio.NewReader(os.Stdin).ReadString('\n')
