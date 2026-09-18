@@ -151,6 +151,14 @@ func TestProjectSwitchPanelExplainsConsequencesBeforeAction(t *testing.T) {
 	if p.Mode != "session-select" || len(p.HandoffSessions) != 1 || len(p.selectedSessions()) != 1 {
 		t.Fatal(p.Mode, len(p.HandoffSessions), len(p.selectedSessions()))
 	}
+	p.key(a, names, "a")
+	if len(p.selectedSessions()) != 0 {
+		t.Fatal("select-all shortcut did not clear the selection")
+	}
+	p.key(a, names, "a")
+	if len(p.selectedSessions()) != 1 {
+		t.Fatal("select-all shortcut did not restore the selection")
+	}
 	s, _ := a.settings()
 	selection := stripANSI(p.render(a, names, s, time.Now()))
 	if !strings.Contains(selection, "[✓]") || !strings.Contains(selection, "one") {
@@ -181,7 +189,7 @@ func TestProjectSwitchPanelExplainsConsequencesBeforeAction(t *testing.T) {
 			t.Fatalf("confirmation omitted %q:\n%s", phrase, view)
 		}
 	}
-	action, err := p.key(a, names, "y")
+	action, err := p.key(a, names, "enter")
 	if err != nil || !strings.HasPrefix(action, "project-handoff:work:66666666-6666-4666-8666-666666666666") {
 		t.Fatal(action, err)
 	}

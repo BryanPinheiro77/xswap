@@ -186,7 +186,7 @@ func testPanelInputHandoff(t *testing.T, action string) {
 				accountSelected = true
 			}
 			if action == "handoff" && accountSelected && !confirmed && strings.Contains(output.String(), "review session continuation") {
-				if _, err := io.WriteString(stdin, "y"); err != nil {
+				if _, err := io.WriteString(stdin, "\r"); err != nil {
 					t.Fatal(err)
 				}
 				confirmed = true

@@ -92,9 +92,9 @@ selects; Esc goes back.
 **Switch account…** changes the global default for new Codex processes and does
 not move conversations. **Continue sessions with another account…** first lists
 the current directory's project conversations, with every conversation
-selected initially. Use `Space` to include or exclude a conversation and `Enter`
-to choose the destination account. The final review shows the selected
-conversations and how many open managed sessions will restart. Other projects,
+selected initially. Use `Space` to toggle one conversation, `a` to select or
+clear all, and `Enter` to choose the destination account. The final review shows
+the selected conversations and how many open managed sessions will restart. Other projects,
 unselected conversations, and unmanaged terminal processes are left alone.
 
 Project selection is stored in `.xswap-account` at the repository root; the

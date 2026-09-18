@@ -15,6 +15,8 @@ tags; unreleased work stays in this section until a release is prepared.
   environment metadata and falling back to the project folder and update time.
 - Keep supervised Codex processes attached to the foreground terminal so
   interactive startup is not suspended by Unix job control.
+- Let `a` select or clear every conversation in the handoff picker and accept
+  either `Enter` or `y` on the final review with mode-specific footer guidance.
 - Safely fast-forward append-only session histories when moving a conversation
   back to an account, while rejecting histories changed in both accounts.
 

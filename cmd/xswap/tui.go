@@ -435,7 +435,7 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 		}
 		lines = append(lines,
 			muted+fmt.Sprintf("  Restart and resume %d currently managed Codex session(s).", p.HandoffManaged)+reset,
-			scope, "", accent(p.Theme)+"  y Confirm continuation   esc Back"+reset)
+			scope, "", accent(p.Theme)+"  enter / y Confirm continuation   esc Back"+reset)
 	}
 	if p.Mode == "rename-input" {
 		lines = append(lines, "", bold+"  Display name: "+p.Input+"█"+reset, muted+"  Type a name, or leave it empty to use the e-mail. Enter saves; Esc cancels."+reset)
@@ -480,7 +480,10 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 		footer = "  Type display name   enter Save   backspace Delete   esc Cancel   q Quit"
 	}
 	if p.Mode == "session-select" {
-		footer = "  space Select / unselect   enter Continue   esc Back   q Quit"
+		footer = "  space Toggle   a Select / unselect all   enter Continue   esc Back"
+	}
+	if p.Mode == "confirm-project-switch" {
+		footer = "  enter / y Confirm continuation   esc Back   q Quit"
 	}
 	rows[p.Height-2] = accent(p.Theme) + footer + reset
 	rows[p.Height-1] = muted + "  ↑/↓ Navigate  ·  Enter Select  ·  Percentages show quota usage" + reset
@@ -540,7 +543,7 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 		return "", nil
 	}
 	if p.Mode == "confirm-project-switch" {
-		if key == "y" || key == "Y" {
+		if key == "enter" || key == "y" || key == "Y" {
 			ids := []string{}
 			for _, session := range p.selectedSessions() {
 				ids = append(ids, session.ID)
@@ -573,6 +576,13 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 			}
 			return "", nil
 		}
+	}
+	if p.Mode == "session-select" && (key == "a" || key == "A") {
+		selectAll := len(p.selectedSessions()) != len(p.HandoffSessions)
+		for _, session := range p.HandoffSessions {
+			p.HandoffSelected[session.ID] = selectAll
+		}
+		return "", nil
 	}
 	if key == "t" || key == "ctrl-t" {
 		p.Theme = (p.Theme + 1) % 3

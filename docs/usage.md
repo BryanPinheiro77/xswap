@@ -45,10 +45,11 @@ Choose **Continue sessions with another account…** in the panel, or run
 `project switch`, for a handoff. The panel follows this sequence:
 
 1. show the current project's conversations, all selected initially;
-2. use `Space` to include or exclude conversations and `Enter` to continue;
+2. use `Space` to toggle one conversation, `a` to select or clear all, and
+   `Enter` to continue;
 3. select the destination account; and
 4. review the project, source, destination, selected conversations, and number
-   of open managed sessions that will restart.
+   of open managed sessions that will restart, then confirm with `Enter` or `y`.
 
 After confirmation XSwap:
 
