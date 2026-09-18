@@ -5,6 +5,8 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ## Unreleased
 
+## v0.3.4 — 2026-09-17
+
 ### Fixed
 
 - Restore the terminal before removing an account, show removal progress, and
