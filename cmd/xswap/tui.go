@@ -253,7 +253,7 @@ func projectLabel(path string) string {
 	return filepath.Clean(path)
 }
 
-func (p *Panel) projectLines() ([]string, int) {
+func (p *Panel) projectLines(a *App) ([]string, int) {
 	lines := []string{}
 	chosen := 0
 	for index, project := range p.HandoffProjects {
@@ -272,7 +272,7 @@ func (p *Panel) projectLines() ([]string, int) {
 		if project.Count == 1 {
 			conversation = "conversation"
 		}
-		meta := fmt.Sprintf("     %s  ·  %d %s  ·  last used %s", clean(projectLabel(project.Root)), project.Count, conversation, project.Updated.Format("Jan 02 15:04"))
+		meta := fmt.Sprintf("     %s  ·  %d %s from %s  ·  last used %s", clean(projectLabel(project.Root)), project.Count, conversation, clean(a.displayName(project.Source)), project.Updated.Format("Jan 02 15:04"))
 		lines = append(lines, title, muted+meta+reset, "")
 	}
 	return lines, chosen
@@ -525,7 +525,7 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 	}
 	lines, chosen := p.accountLines(a, names, s, now)
 	if p.Mode == "project-select" {
-		lines, chosen = p.projectLines()
+		lines, chosen = p.projectLines(a)
 	}
 	if p.Mode == "session-select" {
 		lines, chosen = p.sessionLines()

@@ -47,7 +47,8 @@ Choose **Continue sessions with another account…** in the panel, or run
 `project switch`, for a handoff. The panel follows this sequence:
 
 1. when opened from the user home, select from existing projects discovered in
-   Codex session metadata; directories without conversations are not listed;
+   Codex session metadata; directories without conversations are not listed,
+   and each row shows the source account and its conversation count;
 2. inside a project, skip that picker and show its conversations directly;
 3. show the chosen project's conversations, all selected initially;
 4. use `Space` to toggle one conversation, `a` to select or clear all, and

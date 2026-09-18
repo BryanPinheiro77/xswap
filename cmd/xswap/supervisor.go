@@ -40,6 +40,7 @@ type projectHandoffPlan struct {
 
 type sessionProject struct {
 	Root    string
+	Source  string
 	Count   int
 	Updated time.Time
 }
@@ -253,11 +254,7 @@ func (a *App) managedForProject(project string) ([]managedCodex, error) {
 }
 
 func (a *App) sessionProjects() ([]sessionProject, error) {
-	type discovered struct {
-		updated time.Time
-		ids     map[string]bool
-	}
-	found := map[string]*discovered{}
+	found := map[string]map[string]map[string]codexSession{}
 	for _, name := range a.names() {
 		home, err := a.require(name)
 		if err != nil {
@@ -273,20 +270,42 @@ func (a *App) sessionProjects() ([]sessionProject, error) {
 				continue
 			}
 			root = filepath.Clean(root)
-			item := found[root]
-			if item == nil {
-				item = &discovered{ids: map[string]bool{}}
-				found[root] = item
+			if found[root] == nil {
+				found[root] = map[string]map[string]codexSession{}
 			}
-			item.ids[session.ID] = true
-			if session.Updated.After(item.updated) {
-				item.updated = session.Updated
+			if found[root][name] == nil {
+				found[root][name] = map[string]codexSession{}
 			}
+			found[root][name][session.ID] = session
 		}
 	}
 	projects := make([]sessionProject, 0, len(found))
-	for root, item := range found {
-		projects = append(projects, sessionProject{Root: root, Count: len(item.ids), Updated: item.updated})
+	for root, accounts := range found {
+		preferred, err := a.accountForDirectory(root)
+		if err != nil {
+			return nil, err
+		}
+		source := preferred
+		sessions := accounts[source]
+		if len(sessions) == 0 {
+			var latest time.Time
+			for name, candidate := range accounts {
+				for _, session := range candidate {
+					if session.Updated.After(latest) {
+						latest = session.Updated
+						source = name
+						sessions = candidate
+					}
+				}
+			}
+		}
+		var updated time.Time
+		for _, session := range sessions {
+			if session.Updated.After(updated) {
+				updated = session.Updated
+			}
+		}
+		projects = append(projects, sessionProject{Root: root, Source: source, Count: len(sessions), Updated: updated})
 	}
 	sort.Slice(projects, func(i, j int) bool {
 		if projects[i].Updated.Equal(projects[j].Updated) {

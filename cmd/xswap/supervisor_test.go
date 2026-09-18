@@ -120,22 +120,31 @@ func TestSessionProjectsComeOnlyFromExistingCodexSessions(t *testing.T) {
 	}
 	firstID := "13131313-1313-4313-8313-131313131313"
 	writeTestSession(t, a.DefaultHome, "2026/09/17", firstID, filepath.Join(first, "service"), "first project")
+	writeTestSession(t, a.DefaultHome, "2026/09/18", "17171717-1717-4717-8717-171717171717", first, "default-only conversation")
 	workHome, _ := a.profile("work")
 	writeTestSession(t, workHome, "2026/09/17", firstID, filepath.Join(first, "service"), "copied first project")
 	writeTestSession(t, a.DefaultHome, "2026/09/18", "14141414-1414-4414-8414-141414141414", second, "second project")
 	missing := filepath.Join(t.TempDir(), "removed")
 	writeTestSession(t, a.DefaultHome, "2026/09/18", "15151515-1515-4515-8515-151515151515", missing, "removed project")
+	if err := a.selectAccount("work"); err != nil {
+		t.Fatal(err)
+	}
 
 	projects, err := a.sessionProjects()
 	if err != nil {
 		t.Fatal(err)
 	}
 	counts := map[string]int{}
+	sources := map[string]string{}
 	for _, project := range projects {
 		counts[project.Root] = project.Count
+		sources[project.Root] = project.Source
 	}
 	if counts[first] != 1 || counts[second] != 1 {
-		t.Fatal("session projects were not discovered and deduplicated", counts)
+		t.Fatal("project counts did not match the selected source account", counts)
+	}
+	if sources[first] != "work" || sources[second] != "default" {
+		t.Fatal("project source accounts did not match handoff selection", sources)
 	}
 	if _, ok := counts[unused]; ok {
 		t.Fatal("directory without Codex sessions was listed")

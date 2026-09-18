@@ -94,8 +94,9 @@ selects; Esc goes back.
 not move conversations. Inside a project, **Continue sessions with another
 account…** immediately lists that project's conversations. From the user home,
 it first lists only existing projects found in Codex session metadata; XSwap does
-not scan every directory on the computer. After choosing a project, every
-conversation is selected initially. Use `Space` to toggle one conversation, `a`
+not scan every directory on the computer. Each row identifies the source account
+and counts the conversations that the next screen will show. After choosing a
+project, every conversation is selected initially. Use `Space` to toggle one conversation, `a`
 to select or clear all, and `Enter` to choose the destination account. The final review shows
 the selected conversations and how many open managed sessions will restart. An
 open conversation that was started outside the XSwap wrapper is identified by
