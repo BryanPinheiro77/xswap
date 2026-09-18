@@ -88,12 +88,13 @@ func testPanelInputHandoff(t *testing.T, action string) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 	defer cancel()
+	quoted := "'" + strings.ReplaceAll(binary, "'", "'\"'\"'") + "'"
+	run := "stty rows 30 cols 120; exec " + quoted + " -test.run=^TestPanelActionHelperProcess$"
 	var cmd *exec.Cmd
 	if runtime.GOOS == "darwin" {
-		cmd = exec.CommandContext(ctx, "script", "-q", "/dev/null", binary, "-test.run=^TestPanelActionHelperProcess$")
+		cmd = exec.CommandContext(ctx, "script", "-q", "/dev/null", "sh", "-c", run)
 	} else {
-		quoted := "'" + strings.ReplaceAll(binary, "'", "'\"'\"'") + "'"
-		cmd = exec.CommandContext(ctx, "script", "-q", "-e", "-c", quoted+" -test.run=^TestPanelActionHelperProcess$", "/dev/null")
+		cmd = exec.CommandContext(ctx, "script", "-q", "-e", "-c", "sh -c "+shellQuoteForTest(run), "/dev/null")
 	}
 	cmd.Env = envWith(envWith(os.Environ(), "XSWAP_TEST_PANEL", "1"), "TERM", "xterm-256color")
 	cmd.Env = envWith(cmd.Env, "XSWAP_TEST_ACTION", action)
@@ -132,9 +133,7 @@ func testPanelInputHandoff(t *testing.T, action string) {
 	var output bytes.Buffer
 	selected := false
 	accountSelected := false
-	sessionUnselected := false
-	sessionReselected := false
-	sessionsConfirmed := false
+	handoffDriven := false
 	confirmed := false
 	answered := false
 	for {
@@ -145,7 +144,7 @@ func testPanelInputHandoff(t *testing.T, action string) {
 			}
 			output.Write(chunk)
 			if !selected && strings.Contains(output.String(), "Update version…") {
-				// Exercise selection and confirmation in the actual raw-terminal event loop.
+				// Exercise selection and confirmation in the actual terminal event loop.
 				down := 0
 				for index, item := range (&Panel{UpdateAvailable: true}).menu() {
 					if (action == "add" && item == "Add account…") ||
@@ -161,35 +160,17 @@ func testPanelInputHandoff(t *testing.T, action string) {
 				}
 				selected = true
 			}
-			if action == "handoff" && selected && !sessionUnselected && strings.Contains(output.String(), "1 of 1 selected") {
-				if _, err := io.WriteString(stdin, " "); err != nil {
-					t.Fatal(err)
-				}
-				sessionUnselected = true
-			}
-			if action == "handoff" && sessionUnselected && !sessionReselected && strings.Contains(output.String(), "0 of 1 selected") {
-				if _, err := io.WriteString(stdin, " "); err != nil {
-					t.Fatal(err)
-				}
-				sessionReselected = true
-			}
-			if action == "handoff" && sessionReselected && !sessionsConfirmed && strings.Count(output.String(), "1 of 1 selected") >= 2 {
-				if _, err := io.WriteString(stdin, "\r"); err != nil {
-					t.Fatal(err)
-				}
-				sessionsConfirmed = true
-			}
-			if action == "handoff" && sessionsConfirmed && !accountSelected && strings.Contains(output.String(), "select destination account") {
-				if _, err := io.WriteString(stdin, "\r"); err != nil {
-					t.Fatal(err)
-				}
-				accountSelected = true
-			}
-			if action == "handoff" && accountSelected && !confirmed && strings.Contains(output.String(), "review session continuation") {
-				if _, err := io.WriteString(stdin, "\r"); err != nil {
-					t.Fatal(err)
-				}
-				confirmed = true
+			if action == "handoff" && selected && !handoffDriven && strings.Contains(output.String(), "select sessions to continue") {
+				handoffDriven = true
+				go func() {
+					// Bubble Tea performs differential rendering, so later frames do not
+					// necessarily contain complete headings. Drive each state with one
+					// key and leave enough time for the next frame to be processed.
+					for _, key := range []string{" ", " ", "\r", "\r", "\r"} {
+						_, _ = io.WriteString(stdin, key)
+						time.Sleep(150 * time.Millisecond)
+					}
+				}()
 			}
 			if action == "remove" && selected && !accountSelected && strings.Contains(output.String(), "remove account") {
 				if _, err := io.WriteString(stdin, "\x1b[B\r"); err != nil {
@@ -226,13 +207,20 @@ func testPanelInputHandoff(t *testing.T, action string) {
 				finished = strings.Contains(output.String(), "XSWAP_PANEL_ACTION:project-handoff:") && strings.Contains(output.String(), "dddddddd-dddd-4ddd-8ddd-dddddddddddd")
 			}
 			if finished {
-				if !strings.Contains(output.String(), "\x1b[?25h\x1b[?1049l") {
-					t.Fatal("terminal was not restored before returning the update action")
+				restoredScreen := strings.Index(output.String(), "\x1b[?1049l")
+				restoredCursor := strings.Index(output.String(), "\x1b[?25h")
+				resultMarker := strings.Index(output.String(), "XSWAP_PANEL_")
+				if restoredScreen < 0 || restoredCursor < 0 || resultMarker < 0 || restoredScreen > resultMarker || restoredCursor > resultMarker {
+					t.Fatalf("terminal was not restored before returning the update action: %q", output.String())
 				}
 				return
 			}
 		case <-ctx.Done():
-			t.Fatalf("update selection did not leave the terminal panel (menu observed: %t)", selected)
+			t.Fatalf("update selection did not leave the terminal panel (menu observed: %t): %q", selected, output.String())
 		}
 	}
+}
+
+func shellQuoteForTest(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
 }

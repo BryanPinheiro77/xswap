@@ -2,17 +2,14 @@ package main
 
 import (
 	"bufio"
-	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"math"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"regexp"
 	"strings"
-	"syscall"
 	"time"
 
 	"golang.org/x/term"
@@ -41,13 +38,6 @@ func interactive() bool {
 		return false
 	}
 	return term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd()))
-}
-func terminalSize() (int, int) {
-	w, h, err := term.GetSize(int(os.Stdout.Fd()))
-	if err == nil && h > 0 && w > 0 {
-		return h, w
-	}
-	return 30, 120
 }
 func (a *App) dashboard(mode, filter string, interval int) error {
 	if !interactive() {
@@ -637,18 +627,16 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 }
 func renderRows(rows []string, width int) string {
 	var b strings.Builder
-	b.WriteString("\x1b[H")
 	for i, row := range rows {
-		b.WriteString("\x1b[2K")
 		b.WriteString(fitANSI(row, width-1))
 		if i < len(rows)-1 {
-			b.WriteString("\r\n")
+			b.WriteByte('\n')
 		}
 	}
 	return b.String()
 }
 func (p *Panel) key(a *App, names []string, key string) (string, error) {
-	if key == "q" || key == "ctrl-c" {
+	if key == "ctrl-c" || (key == "q" && p.Mode != "rename-input") {
 		return "quit", nil
 	}
 	if key == "esc" {
@@ -963,241 +951,4 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 		}
 	}
 	return "", nil
-}
-func parseKeys(buffer []byte, flush bool) ([]string, []byte) {
-	keys := []string{}
-	for len(buffer) > 0 {
-		if buffer[0] == 27 {
-			if len(buffer) >= 3 && (buffer[1] == '[' || buffer[1] == 'O') {
-				switch buffer[2] {
-				case 'A':
-					keys = append(keys, "up")
-				case 'B':
-					keys = append(keys, "down")
-				}
-				buffer = buffer[3:]
-				continue
-			}
-			if len(buffer) < 3 && !flush {
-				return keys, buffer
-			}
-			keys = append(keys, "esc")
-			buffer = buffer[1:]
-			continue
-		}
-		key := string(buffer[:1])
-		switch buffer[0] {
-		case 3:
-			key = "ctrl-c"
-		case 127:
-			key = "backspace"
-		case 20:
-			key = "ctrl-t"
-		case 10, 13:
-			key = "enter"
-		}
-		keys = append(keys, key)
-		buffer = buffer[1:]
-	}
-	return keys, buffer
-}
-func (a *App) panel(mode, filter string, interval int) (string, error) {
-	saved, err := term.MakeRaw(int(os.Stdin.Fd()))
-	if err != nil {
-		return "", err
-	}
-	fmt.Print("\x1b[?1049h\x1b[?25l\x1b[2J")
-	defer func() {
-		_ = term.Restore(int(os.Stdin.Fd()), saved)
-		fmt.Print(reset + "\x1b[?25h\x1b[?1049l")
-	}()
-	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer cancel()
-	updates := make(chan panelUpdate, 32)
-	input := make(chan []byte, 16)
-	readNext := make(chan struct{}, 1)
-	inputDone := make(chan struct{})
-	go func() {
-		defer close(inputDone)
-		buffer := make([]byte, 64)
-		for ctx.Err() == nil {
-			n, err := readStdin(buffer)
-			if err != nil {
-				return
-			}
-			if n == 0 {
-				continue
-			}
-			data := append([]byte{}, buffer[:n]...)
-			select {
-			case input <- data:
-			case <-ctx.Done():
-				return
-			}
-			// Do not read ahead: the next action may hand stdin to login or a prompt.
-			select {
-			case <-readNext:
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-	h, w := terminalSize()
-	p := Panel{Mode: mode, Filter: filter, Records: map[string]Record{}, Width: w, Height: h}
-	updateChecks := make(chan bool, 1)
-	checkDue := time.Now().Add(updateCheckInterval)
-	check := func() {
-		go func() {
-			available := a.checkUpdate(ctx)
-			select {
-			case updateChecks <- available:
-			case <-ctx.Done():
-			}
-		}()
-	}
-	check()
-	workerDone := make(chan struct{})
-	close(workerDone)
-	fetchCancel := func() {}
-	refresh := func() {
-		if p.Busy {
-			return
-		}
-		p.Busy = true
-		fetchCtx, stop := context.WithCancel(ctx)
-		fetchCancel = stop
-		workerDone = make(chan struct{})
-		names := a.names()
-		if filter != "" {
-			names = []string{filter}
-		}
-		go func(done chan struct{}) {
-			defer close(done)
-			defer stop()
-			for _, name := range names {
-				if fetchCtx.Err() != nil {
-					return
-				}
-				record, err := a.readLimits(fetchCtx, name)
-				message := ""
-				if err != nil {
-					message = err.Error()
-				}
-				select {
-				case updates <- panelUpdate{Name: name, Record: record, Error: message}:
-				case <-fetchCtx.Done():
-					return
-				}
-			}
-			select {
-			case updates <- panelUpdate{Done: true}:
-			case <-fetchCtx.Done():
-			}
-		}(workerDone)
-	}
-	defer func() {
-		cancel()
-		fetchCancel()
-		select {
-		case <-workerDone:
-		case <-time.After(3 * time.Second):
-		}
-		select {
-		case <-inputDone:
-		case <-time.After(200 * time.Millisecond):
-		}
-	}()
-	a.ensureDaemon()
-	refresh()
-	tick := time.NewTicker(100 * time.Millisecond)
-	defer tick.Stop()
-	lastDraw := time.Time{}
-	var buffer []byte
-	received := time.Time{}
-	for {
-		dirty := false
-		inputReceived := false
-		var keys []string
-		select {
-		case <-ctx.Done():
-			return "", nil
-		case data := <-input:
-			inputReceived = true
-			buffer = append(buffer, data...)
-			received = time.Now()
-			keys, buffer = parseKeys(buffer, false)
-			dirty = true
-		case update := <-updates:
-			if update.Done {
-				p.Busy = false
-				p.Due = time.Now().Add(time.Duration(interval) * time.Second)
-			} else {
-				p.Records[update.Name] = reconcileQuotaRecord(p.Records[update.Name], update.Record, update.Error)
-			}
-			dirty = true
-		case available := <-updateChecks:
-			if p.UpdateAvailable != available {
-				p.MenuCursor = 0
-			}
-			p.UpdateAvailable = available
-			dirty = true
-		case <-tick.C:
-			if !time.Now().Before(checkDue) {
-				check()
-				checkDue = time.Now().Add(updateCheckInterval)
-			}
-			if len(buffer) > 0 && time.Since(received) > 120*time.Millisecond {
-				keys, buffer = parseKeys(buffer, true)
-				dirty = true
-			}
-		}
-		if !p.Busy && !p.Due.IsZero() && !time.Now().Before(p.Due) {
-			refresh()
-		}
-		names := a.names()
-		if filter != "" {
-			names = []string{filter}
-		}
-		if p.Mode == "project-select" {
-			p.Cursor = min(p.Cursor, len(p.HandoffProjects)-1)
-		} else if p.Mode == "session-select" {
-			p.Cursor = min(p.Cursor, len(p.HandoffSessions)-1)
-		} else {
-			p.Cursor = min(p.Cursor, len(names)-1)
-		}
-		for _, key := range keys {
-			if p.Mode == "confirm" && (key == "y" || key == "Y") {
-				fetchCancel()
-				select {
-				case <-workerDone:
-				case <-time.After(3 * time.Second):
-				}
-				p.Busy = false
-			}
-			action, err := p.key(a, names, key)
-			if err != nil {
-				p.Message = err.Error()
-			}
-			if action == "quit" || action == "add" || action == "update" || strings.HasPrefix(action, "remove:") || strings.HasPrefix(action, "project-handoff:") {
-				return action, nil
-			}
-			if action == "refresh" {
-				refresh()
-			}
-		}
-		if inputReceived {
-			readNext <- struct{}{}
-		}
-		if dirty || time.Since(lastDraw) >= time.Second {
-			h, w = terminalSize()
-			p.Width = w
-			p.Height = h
-			s, err := a.settings()
-			if err != nil {
-				return "", err
-			}
-			fmt.Print(p.render(a, names, s, time.Now()))
-			lastDraw = time.Now()
-		}
-	}
 }
