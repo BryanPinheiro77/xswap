@@ -385,3 +385,24 @@ func (a *App) indexTransferredSession(account, id string) error {
 		return err
 	})
 }
+
+func (a *App) sessionIsOpen(home, id string) (bool, error) {
+	if a.SessionActive != nil {
+		return a.SessionActive(home, id)
+	}
+	if !sessionIDPattern.MatchString(id) {
+		return false, errors.New("session id is invalid")
+	}
+	path := filepath.Join(home, "thread-writer-locks", strings.ToLower(id)+".lock")
+	info, err := os.Lstat(path)
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		return false, errors.New("session writer lock is not a regular file")
+	}
+	return sessionLockActive(path)
+}

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestProjectScopesHandleHomeAndFilesystemRoot(t *testing.T) {
@@ -164,5 +165,55 @@ func TestClearProjectAccount(t *testing.T) {
 	}
 	if _, err := clearProject(root); err != nil {
 		t.Fatal("clear should be idempotent", err)
+	}
+}
+
+func TestPanelMarksEffectiveProjectAccountActive(t *testing.T) {
+	a := fixture(t)
+	ready(t, a, "work")
+	project := t.TempDir()
+	if err := os.Mkdir(filepath.Join(project, ".git"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.pinProject(project, "work"); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(project)
+	p := Panel{Mode: "home", Records: map[string]Record{}, Width: 100, Height: 30}
+	s, err := a.settings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines, _ := p.accountLines(a, a.names(), s, time.Now())
+	view := stripANSI(strings.Join(lines, "\n"))
+	if !strings.Contains(view, "work   ● active") {
+		t.Fatalf("project account was not marked active:\n%s", view)
+	}
+	if !strings.Contains(view, "default   (global default)") {
+		t.Fatalf("global selection was not identified separately:\n%s", view)
+	}
+}
+
+func TestPanelExplainsGlobalSwitchInsidePinnedProject(t *testing.T) {
+	t.Setenv("CODEX_HOME", "")
+	a := fixture(t)
+	ready(t, a, "work")
+	project := t.TempDir()
+	if _, err := a.pinProject(project, "work"); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(project)
+	p := Panel{Mode: "switch", Records: map[string]Record{}, Width: 100, Height: 30}
+	names := a.names()
+	for index, name := range names {
+		if name == "default" {
+			p.Cursor = index
+		}
+	}
+	if _, err := p.key(a, names, "enter"); err != nil {
+		t.Fatal(err)
+	}
+	if p.Message != "Global default changed to default; this project remains on work." {
+		t.Fatal("switch message did not explain project precedence", p.Message)
 	}
 }

@@ -145,6 +145,7 @@ type Panel struct {
 	HandoffProject, HandoffSource         string
 	HandoffSessions                       []codexSession
 	HandoffSelected, HandoffRunning       map[string]bool
+	HandoffUnmanaged                      map[string]bool
 }
 
 var menuItems = []string{"Switch account…", "Continue sessions with another account…", "Watch accounts", "Auto-switch view", "Add account…", "Rename account…", "Disable / enable account…", "Remove account…", "Theme…", "Quit"}
@@ -164,6 +165,16 @@ func (p *Panel) selectedSessions() []codexSession {
 	selected := []codexSession{}
 	for _, session := range p.HandoffSessions {
 		if p.HandoffSelected[session.ID] {
+			selected = append(selected, session)
+		}
+	}
+	return selected
+}
+
+func (p *Panel) selectedUnmanagedSessions() []codexSession {
+	selected := []codexSession{}
+	for _, session := range p.HandoffSessions {
+		if p.HandoffSelected[session.ID] && p.HandoffUnmanaged[session.ID] {
 			selected = append(selected, session)
 		}
 	}
@@ -203,6 +214,8 @@ func (p *Panel) sessionLines() ([]string, int) {
 		meta := session.Updated.Format("Jan 02 15:04")
 		if p.HandoffRunning[session.ID] {
 			meta += "  ·  running"
+		} else if p.HandoffUnmanaged[session.ID] {
+			meta += "  ·  open outside XSwap"
 		}
 		lines = append(lines, title, muted+"       "+meta+reset, "")
 	}
@@ -234,7 +247,11 @@ func quotaLine(item QuotaItem, width int, now time.Time) string {
 func (p *Panel) accountLines(a *App, names []string, s Settings, now time.Time) ([]string, int) {
 	lines := []string{}
 	chosen := 0
-	active := a.selected()
+	global := a.selected()
+	active := global
+	if effective, err := a.accountForDirectory(currentDirectory()); err == nil {
+		active = effective
+	}
 	for index, name := range names {
 		record, ok := p.Records[name]
 		state := quotaRecordState(record)
@@ -261,6 +278,8 @@ func (p *Panel) accountLines(a *App, names []string, s Settings, now time.Time) 
 		}
 		if name == active {
 			title += accent(p.Theme) + "   ● active" + reset
+		} else if name == global {
+			title += muted + "   (global default)" + reset
 		}
 		if disabled(s, name) {
 			title += muted + "   (disabled)" + reset
@@ -379,7 +398,7 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 		rows[0] = "Resize the terminal to at least 50×20. Press q to quit."
 		return renderRows(rows, p.Width)
 	}
-	heading := map[string]string{"home": "xswap", "watch": "watching all accounts", "auto": "auto-switch view", "switch": "select account", "session-select": "select sessions to continue", "project-switch": "select destination account", "rename": "select account to rename", "rename-input": "rename account", "disable": "disable / enable account", "remove": "remove account", "confirm": "confirm removal", "confirm-update": "confirm update", "confirm-project-switch": "review session continuation"}[p.Mode]
+	heading := map[string]string{"home": "xswap", "watch": "watching all accounts", "auto": "auto-switch view", "switch": "select account", "session-select": "select sessions to continue", "unmanaged-warning": "restart open sessions", "project-switch": "select destination account", "rename": "select account to rename", "rename-input": "rename account", "disable": "disable / enable account", "remove": "remove account", "confirm": "confirm removal", "confirm-update": "confirm update", "confirm-project-switch": "review session continuation"}[p.Mode]
 	if p.Mode == "home" {
 		heading += " " + clean(version)
 	}
@@ -440,6 +459,15 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 			muted+fmt.Sprintf("  Restart and resume %d currently managed Codex session(s).", p.HandoffManaged)+reset,
 			scope, "", accent(p.Theme)+"  enter / y Confirm continuation   esc Back"+reset)
 	}
+	if p.Mode == "unmanaged-warning" {
+		lines = []string{"", bold + "  These open sessions are not managed by XSwap:" + reset}
+		for _, session := range p.selectedUnmanagedSessions() {
+			lines = append(lines, "    • "+sessionTitle(session, p.HandoffProject))
+		}
+		lines = append(lines, "", "\x1b[33m  Close each session and reopen it with codex resume in this project."+reset,
+			muted+"  Then open XSwap and select the sessions again. No conversation was copied."+reset,
+			"", accent(p.Theme)+"  enter / esc Back"+reset)
+	}
 	if p.Mode == "rename-input" {
 		lines = append(lines, "", bold+"  Display name: "+p.Input+"█"+reset, muted+"  Type a name, or leave it empty to use the e-mail. Enter saves; Esc cancels."+reset)
 	}
@@ -488,6 +516,9 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 	if p.Mode == "confirm-project-switch" {
 		footer = "  enter / y Confirm continuation   esc Back   q Quit"
 	}
+	if p.Mode == "unmanaged-warning" {
+		footer = "  enter / esc Back   q Quit"
+	}
 	rows[p.Height-2] = accent(p.Theme) + footer + reset
 	rows[p.Height-1] = muted + "  ↑/↓ Navigate  ·  Enter Select  ·  Percentages show quota usage" + reset
 	return renderRows(rows, p.Width)
@@ -528,6 +559,11 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 			p.Cursor = 0
 			return "", nil
 		}
+		if p.Mode == "unmanaged-warning" {
+			p.Mode = "session-select"
+			p.Offset = 0
+			return "", nil
+		}
 		p.Mode = "home"
 		p.Offset = 0
 		p.Pending = ""
@@ -552,6 +588,13 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 				ids = append(ids, session.ID)
 			}
 			return "project-handoff:" + p.Pending + ":" + strings.Join(ids, ","), nil
+		}
+		return "", nil
+	}
+	if p.Mode == "unmanaged-warning" {
+		if key == "enter" {
+			p.Mode = "session-select"
+			p.Offset = 0
 		}
 		return "", nil
 	}
@@ -685,6 +728,7 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 				p.HandoffSessions = plan.Sessions
 				p.HandoffSelected = map[string]bool{}
 				p.HandoffRunning = map[string]bool{}
+				p.HandoffUnmanaged = map[string]bool{}
 				for _, session := range plan.Sessions {
 					p.HandoffSelected[session.ID] = true
 				}
@@ -692,6 +736,9 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 					if record.SessionID != "" {
 						p.HandoffRunning[record.SessionID] = true
 					}
+				}
+				for _, session := range plan.Unmanaged {
+					p.HandoffUnmanaged[session.ID] = true
 				}
 				p.Mode = "session-select"
 			case "Watch accounts":
@@ -717,6 +764,9 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 		} else if p.Mode == "session-select" {
 			if len(p.selectedSessions()) == 0 {
 				p.Message = "Select at least one conversation to continue."
+			} else if len(p.selectedUnmanagedSessions()) > 0 {
+				p.Mode = "unmanaged-warning"
+				p.Offset = 0
 			} else if len(names) < 2 {
 				p.Message = "Add another account before continuing these conversations."
 			} else {
@@ -737,6 +787,8 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 				p.Message = "Selected " + names[p.Cursor] + " for new Codex processes."
 				if os.Getenv("CODEX_HOME") != "" {
 					p.Message = "Explicit CODEX_HOME takes priority; unset it to apply the selection."
+				} else if effective, accountErr := a.accountForDirectory(currentDirectory()); accountErr == nil && effective != names[p.Cursor] {
+					p.Message = "Global default changed to " + names[p.Cursor] + "; this project remains on " + effective + "."
 				}
 				p.Mode = "home"
 				p.Offset = 0
@@ -745,6 +797,13 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 			plan, err := a.planSelectedProjectHandoff(currentDirectory(), names[p.Cursor], p.HandoffSelected)
 			if err != nil {
 				p.Message = err.Error()
+			} else if len(plan.Unmanaged) > 0 {
+				p.HandoffUnmanaged = map[string]bool{}
+				for _, session := range plan.Unmanaged {
+					p.HandoffUnmanaged[session.ID] = true
+				}
+				p.Mode = "unmanaged-warning"
+				p.Offset = 0
 			} else {
 				p.Pending = names[p.Cursor]
 				p.HandoffProject = plan.Project

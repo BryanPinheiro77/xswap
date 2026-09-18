@@ -20,6 +20,7 @@ type App struct {
 	HTTPClient                                *http.Client
 	CommandRunner                             func(context.Context, string, ...string) error
 	SessionIndexer                            func(string, string) error
+	SessionActive                             func(string, string) (bool, error)
 }
 type AutoConfig struct {
 	Enabled   bool `json:"enabled"`

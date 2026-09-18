@@ -55,9 +55,10 @@ go build -trimpath -o xswap.exe ./cmd/xswap
 ```
 
 The installer creates the `xswap`, `codex-swap`, and `codex` commands using
-platform-specific links or wrappers. The `codex` command calls your original CLI
-with the selected home; it does not modify the Codex package. Your existing login
-stays available as `default`.
+platform-specific links or wrappers. The `codex` wrapper supervises each newly
+launched terminal session and calls your original CLI with the selected home; it
+does not modify the Codex package. Your existing login stays available as
+`default`. Opening the `xswap` panel before `codex` is not required.
 
 [GitHub Releases](https://github.com/BryanPinheiro77/xswap/releases) provide
 macOS, Linux, and Windows archives for arm64/amd64. On macOS/Linux, extract the
@@ -94,8 +95,12 @@ not move conversations. **Continue sessions with another account…** first list
 the current directory's project conversations, with every conversation
 selected initially. Use `Space` to toggle one conversation, `a` to select or
 clear all, and `Enter` to choose the destination account. The final review shows
-the selected conversations and how many open managed sessions will restart. Other projects,
-unselected conversations, and unmanaged terminal processes are left alone.
+the selected conversations and how many open managed sessions will restart. An
+open conversation that was started outside the XSwap wrapper is identified by
+its Codex writer lock. XSwap stops the handoff, names every affected conversation,
+and asks you to close it and reopen it with `codex resume` before trying again.
+Closed conversations do not need this step. Other projects and unselected
+conversations are left alone.
 
 Project selection is stored in `.xswap-account` at the repository root; the
 nearest file wins in nested directories. XSwap adds it to the repository's
@@ -104,6 +109,12 @@ project's `.gitignore`. Original conversation files remain in the source
 profile. XSwap copies no authentication, config, cache, or unselected session
 data during a handoff. The CLI command `xswap project switch NAME` selects every
 conversation in the project for non-panel workflows.
+
+A confirmed project handoff also makes the destination the account used by
+future `codex` processes in that project. A handoff from the user home updates
+the global account for future processes in unpinned directories. **Switch
+account…** changes only that global default: already running Codex sessions keep
+their current account and are not moved.
 
 When run directly from the user home, a handoff remains available for standalone
 conversations and updates the global account for unpinned directories instead of

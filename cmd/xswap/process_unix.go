@@ -3,6 +3,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"syscall"
@@ -43,3 +44,23 @@ func terminateManagedProcess(cmd *exec.Cmd, force bool) error {
 
 func managedProcessAlive(pid int) bool { return pid > 0 && syscall.Kill(pid, 0) == nil }
 func stopManagedProcess(pid int) error { return syscall.Kill(pid, syscall.SIGTERM) }
+
+func sessionLockActive(path string) (bool, error) {
+	file, err := os.OpenFile(path, os.O_RDWR, 0)
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	defer file.Close()
+	err = syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+	if err == nil {
+		_ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
+		return false, nil
+	}
+	if errors.Is(err, syscall.EWOULDBLOCK) || errors.Is(err, syscall.EAGAIN) {
+		return true, nil
+	}
+	return false, err
+}

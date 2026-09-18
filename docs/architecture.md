@@ -50,13 +50,16 @@ precedence. Each wrapper process supervises only the Codex child it started and
 publishes private runtime metadata under the XSwap state directory.
 
 The session-continuation action requires confirmation. It first validates and
-indexes a safe snapshot of every selected conversation, then writes a handoff
+copies a safe snapshot of every selected conversation, then writes a handoff
 request for each live managed child in the selected project. It signals only the
 Codex child process, which stays in the terminal's foreground process group, and
 lets the original wrapper fast-forward and resume the matching conversation in
 the same terminal and working directory. The coordinator performs a final sync.
-It never signals an unmanaged process, an unselected conversation, or a session
-from another project.
+Before confirmation, XSwap probes Codex's per-thread writer locks. A held lock
+without a matching live XSwap supervisor identifies an open unmanaged
+conversation; the handoff is blocked and the panel names it so the user can
+close it and reopen it through `codex resume`. This prevents the source and
+destination histories from accepting new messages independently.
 
 Repository and directory scopes use `.xswap-account`. Git repositories receive
 a local `/.xswap-account` rule in `.git/info/exclude` before the pin is written;
@@ -68,9 +71,11 @@ Transfers parse the rollout's `session_meta`, require a UUID and an absolute
 working directory inside the project, reject symlinks and path traversal, and
 copy one JSONL file atomically. Rollouts are treated as append-only: an older
 identical prefix is safely advanced in either account, while histories that
-changed independently are rejected as divergent. Codex's `migrate-rollouts`
-command indexes each copied or advanced conversation. Authentication,
-configuration, caches, and profile databases are never copied.
+changed independently are rejected as divergent. Managed sessions register
+themselves when the wrapper resumes them. XSwap registers copied inactive
+sessions through Codex's `thread/resume` app-server request so they appear in
+the destination picker. Authentication, configuration, caches, and profile
+databases are never copied.
 
 ## Quota queries
 

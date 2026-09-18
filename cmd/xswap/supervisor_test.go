@@ -104,6 +104,57 @@ func TestProjectHandoffFindsProjectSessionsOutsideSelectedAccount(t *testing.T) 
 	}
 }
 
+func TestProjectHandoffBlocksOpenSessionOutsideSupervisor(t *testing.T) {
+	a := fixture(t)
+	ready(t, a, "work")
+	project := t.TempDir()
+	id := "34343434-3434-4434-8434-343434343434"
+	writeTestSession(t, a.DefaultHome, "2026/09/18", id, project, "legacy open conversation")
+	a.SessionActive = func(home, sessionID string) (bool, error) {
+		return home == a.DefaultHome && sessionID == id, nil
+	}
+	plan, err := a.planProjectHandoff(project, "work")
+	if err != nil || len(plan.Unmanaged) != 1 || plan.Unmanaged[0].ID != id {
+		t.Fatal("open unmanaged conversation was not identified", plan, err)
+	}
+	if _, err = a.requestProjectHandoff(plan); err == nil || !strings.Contains(err.Error(), "legacy open conversation") {
+		t.Fatal("handoff did not name and block the open unmanaged conversation", err)
+	}
+	if exists(filepath.Join(project, projectAccountFile)) {
+		t.Fatal("blocked handoff changed the project account")
+	}
+}
+
+func TestPanelExplainsOpenSessionOutsideSupervisor(t *testing.T) {
+	a := fixture(t)
+	ready(t, a, "work")
+	project := t.TempDir()
+	t.Chdir(project)
+	id := "45454545-4545-4454-8454-454545454545"
+	writeTestSession(t, a.DefaultHome, "2026/09/18", id, project, "restart this conversation")
+	a.SessionActive = func(string, string) (bool, error) { return true, nil }
+	p := Panel{Mode: "home", Records: map[string]Record{}, Width: 100, Height: 30}
+	names := a.names()
+	for index, item := range p.menu() {
+		if item == "Continue sessions with another account…" {
+			p.MenuCursor = index
+		}
+	}
+	if _, err := p.key(a, names, "enter"); err != nil || p.Mode != "session-select" || !p.HandoffUnmanaged[id] {
+		t.Fatal("session picker did not mark the unmanaged conversation", p.Mode, err)
+	}
+	if _, err := p.key(a, names, "enter"); err != nil || p.Mode != "unmanaged-warning" {
+		t.Fatal("panel did not open the restart warning", p.Mode, err)
+	}
+	s, _ := a.settings()
+	view := stripANSI(p.render(a, names, s, time.Now()))
+	for _, phrase := range []string{"restart this conversation", "codex resume", "No conversation was copied"} {
+		if !strings.Contains(view, phrase) {
+			t.Fatalf("warning omitted %q:\n%s", phrase, view)
+		}
+	}
+}
+
 func TestProjectHandoffRejectsDivergenceBeforeChangingProjectAccount(t *testing.T) {
 	a := fixture(t)
 	ready(t, a, "work")

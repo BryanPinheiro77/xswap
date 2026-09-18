@@ -30,11 +30,12 @@ type handoffRequest struct {
 }
 
 type projectHandoffPlan struct {
-	Project  string
-	Source   string
-	Target   string
-	Sessions []codexSession
-	Managed  []managedCodex
+	Project   string
+	Source    string
+	Target    string
+	Sessions  []codexSession
+	Managed   []managedCodex
+	Unmanaged []codexSession
 }
 
 type projectHandoffResult struct {
@@ -261,11 +262,16 @@ func (a *App) projectHandoffSource(directory string) (projectHandoffPlan, error)
 	if err != nil {
 		return projectHandoffPlan{}, err
 	}
+	sourceHome, err := a.require(source)
+	if err != nil {
+		return projectHandoffPlan{}, err
+	}
 	records, err := a.managedForProject(project)
 	if err != nil {
 		return projectHandoffPlan{}, err
 	}
 	managed := []managedCodex{}
+	managedSessions := map[string]bool{}
 	for _, record := range records {
 		if record.Account != source {
 			continue
@@ -274,10 +280,24 @@ func (a *App) projectHandoffSource(directory string) (projectHandoffPlan, error)
 		if identifyErr == nil {
 			record.SessionID = session.ID
 			record.SessionPath = session.Path
+			managedSessions[session.ID] = true
 		}
 		managed = append(managed, record)
 	}
-	return projectHandoffPlan{Project: project, Source: source, Sessions: sessions, Managed: managed}, nil
+	unmanaged := []codexSession{}
+	for _, session := range sessions {
+		if managedSessions[session.ID] {
+			continue
+		}
+		open, openErr := a.sessionIsOpen(sourceHome, session.ID)
+		if openErr != nil {
+			return projectHandoffPlan{}, fmt.Errorf("inspect session %s: %w", session.ID, openErr)
+		}
+		if open {
+			unmanaged = append(unmanaged, session)
+		}
+	}
+	return projectHandoffPlan{Project: project, Source: source, Sessions: sessions, Managed: managed, Unmanaged: unmanaged}, nil
 }
 
 func (a *App) handoffSessions(project, preferred string) (string, []codexSession, error) {
@@ -373,6 +393,13 @@ func filterHandoffPlan(plan projectHandoffPlan, selected map[string]bool) (proje
 	}
 	plan.Sessions = sessions
 	plan.Managed = managed
+	unmanaged := []codexSession{}
+	for _, session := range plan.Unmanaged {
+		if selected[session.ID] {
+			unmanaged = append(unmanaged, session)
+		}
+	}
+	plan.Unmanaged = unmanaged
 	return plan, nil
 }
 
@@ -420,6 +447,13 @@ func (a *App) requestProjectHandoff(plan projectHandoffPlan) (projectHandoffResu
 	}
 	plan = current
 	result := projectHandoffResult{Project: plan.Project, Source: plan.Source, Target: plan.Target, Sessions: len(plan.Sessions), Global: isHomeScope(plan.Project)}
+	if len(plan.Unmanaged) > 0 {
+		titles := make([]string, 0, len(plan.Unmanaged))
+		for _, session := range plan.Unmanaged {
+			titles = append(titles, sessionTitle(session, plan.Project))
+		}
+		return result, fmt.Errorf("open sessions are outside XSwap supervision: %s; close them, reopen with codex resume, and try again", strings.Join(titles, "; "))
+	}
 	selectedAccounts, err := a.managedForProject(plan.Project)
 	if err != nil {
 		return result, err

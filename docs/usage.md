@@ -22,6 +22,8 @@ profile. Choose the intended account in the browser. If cancelled, run
 Profiles retain their assigned names. Creating a new profile does not select it.
 Global manual switching affects new Codex processes. Existing processes retain
 their original account. Selection does not alter the Codex desktop application.
+The installed `codex` wrapper supervises new terminal sessions automatically;
+you do not need to open the `xswap` panel first.
 
 ## Project accounts and conversation handoff
 
@@ -51,6 +53,11 @@ Choose **Continue sessions with another account…** in the panel, or run
 4. review the project, source, destination, selected conversations, and number
    of open managed sessions that will restart, then confirm with `Enter` or `y`.
 
+If a selected conversation is currently open outside XSwap supervision, the
+panel names it and stops before copying anything. Close that Codex process,
+reopen the conversation with `codex resume` in the same project, and select it
+again. Closed conversations can be copied without being reopened first.
+
 After confirmation XSwap:
 
 1. validates, copies, and indexes a safe snapshot of every selected conversation;
@@ -61,14 +68,18 @@ After confirmation XSwap:
 4. fast-forwards and resumes each selected managed conversation in its original
    terminal and working directory.
 
-Other projects, terminals, and unmanaged processes are unchanged. Conversations
+The project pin means future `codex` processes opened in that repository use the
+destination account. A home-scoped handoff changes the global selection for
+future processes in unpinned directories. Other projects and terminals are
+unchanged. Conversations
 remain in the source profile and append-only transfers can safely return to an
 earlier account. If both copies changed independently, XSwap reports a divergence
 instead of overwriting either history. XSwap
 does not copy authentication, config, cache, database, or unrelated sessions.
-Sessions opened before installing a version with supervision cannot be restarted
-automatically; their conversations are still copied and can be opened with
-`codex resume` under the destination project account.
+Open sessions started outside the XSwap wrapper cannot be restarted automatically.
+XSwap detects their active writer locks and requires them to be reopened through
+the wrapper before handoff, preventing two accounts from continuing divergent
+copies of the same conversation.
 
 The noninteractive `xswap project switch NAME` command selects every conversation
 in the project because it has no interactive session picker.
