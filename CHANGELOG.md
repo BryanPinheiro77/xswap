@@ -5,6 +5,13 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ## Unreleased
 
+### Fixed
+
+- Fall back to the canonical release repository when a build has none embedded,
+  so source checkouts installed with `make install` detect updates and show
+  **Update version…** instead of failing with `release repository not
+  configured`. An `update.json` repository still takes precedence.
+
 ## v0.4.0 — 2026-09-18
 
 ### Changed

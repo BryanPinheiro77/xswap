@@ -47,6 +47,11 @@ var versionPattern = regexp.MustCompile(`^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0
 
 const updateCheckInterval = 15 * time.Minute
 
+// defaultReleaseRepo keeps updates available for builds without an injected
+// repository, such as source checkouts installed with make install. Release
+// builds override it through the linker and update.json still takes precedence.
+const defaultReleaseRepo = "BryanPinheiro77/xswap"
+
 func newerVersion(latest, current string) bool {
 	l := versionPattern.FindStringSubmatch(latest)
 	c := versionPattern.FindStringSubmatch(current)
@@ -75,7 +80,10 @@ func (a *App) repository() string {
 	if cfg.Repository != "" {
 		return cfg.Repository
 	}
-	return releaseRepo
+	if releaseRepo != "" {
+		return releaseRepo
+	}
+	return defaultReleaseRepo
 }
 func (a *App) cachedUpdate() updateState {
 	var s updateState
@@ -137,11 +145,12 @@ func (a *App) latestRelease(ctx context.Context) (githubRelease, error) {
 	return r, err
 }
 func (a *App) checkUpdate(ctx context.Context) bool {
-	if a.repository() == "" {
+	repo := a.repository()
+	if !repoPattern.MatchString(repo) {
 		return false
 	}
 	s := a.cachedUpdate()
-	if s.Repository == a.repository() && time.Since(s.Checked) >= 0 && time.Since(s.Checked) < updateCheckInterval {
+	if s.Repository == repo && time.Since(s.Checked) >= 0 && time.Since(s.Checked) < updateCheckInterval {
 		return newerVersion(s.Latest, version)
 	}
 	r, err := a.latestRelease(ctx)
