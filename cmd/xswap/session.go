@@ -124,7 +124,10 @@ func readSession(path string) (codexSession, error) {
 		created = info.ModTime()
 	}
 	preview := ""
-	remaining := 256 << 10
+	// Initial instructions can precede the first user message. Scan a bounded
+	// local prefix so the picker can show a useful title without loading a whole
+	// conversation into memory.
+	remaining := 1 << 20
 	for preview == "" && remaining > 0 {
 		line, lineErr := reader.ReadBytes('\n')
 		remaining -= len(line)

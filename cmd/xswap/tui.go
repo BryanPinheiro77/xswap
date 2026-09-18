@@ -170,10 +170,14 @@ func (p *Panel) selectedSessions() []codexSession {
 	return selected
 }
 
-func sessionTitle(session codexSession) string {
+func sessionTitle(session codexSession, project string) string {
 	title := strings.Join(strings.Fields(session.Preview), " ")
 	if title == "" {
-		title = "Session " + session.ID[:8]
+		location := filepath.Base(project)
+		if relative, err := filepath.Rel(project, session.CWD); err == nil && relative != "." && !strings.HasPrefix(relative, "..") {
+			location = relative
+		}
+		title = "Conversation in " + location
 	}
 	if runes := []rune(title); len(runes) > 72 {
 		title = string(runes[:71]) + "…"
@@ -192,11 +196,11 @@ func (p *Panel) sessionLines() ([]string, int) {
 		if p.HandoffSelected[session.ID] {
 			box = "[✓]"
 		}
-		title := fmt.Sprintf("  %s  %d  %s", box, index+1, sessionTitle(session))
+		title := fmt.Sprintf("  %s  %d  %s", box, index+1, sessionTitle(session, p.HandoffProject))
 		if index == p.Cursor {
 			title = highlight + accent(p.Theme) + " ▌ " + strings.TrimSpace(title) + reset
 		}
-		meta := session.Updated.Format("Jan 02 15:04") + "  ·  " + session.ID[:8]
+		meta := session.Updated.Format("Jan 02 15:04")
 		if p.HandoffRunning[session.ID] {
 			meta += "  ·  running"
 		}
@@ -423,7 +427,7 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 			muted + "  Project: " + clean(filepath.Base(p.HandoffProject)) + reset,
 			muted + fmt.Sprintf("  Selected conversations: %d", len(selected)) + reset}
 		for _, session := range selected {
-			lines = append(lines, "    • "+sessionTitle(session))
+			lines = append(lines, "    • "+sessionTitle(session, p.HandoffProject))
 		}
 		lines = append(lines,
 			muted+fmt.Sprintf("  Restart and resume %d currently managed Codex session(s).", p.HandoffManaged)+reset,

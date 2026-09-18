@@ -11,6 +11,8 @@ tags; unreleased work stays in this section until a release is prepared.
   account…** so its effect is clear before selecting a destination account.
 - Add a session picker before account selection, with every project conversation
   selected initially and `Space` controls for selective continuation.
+- Label conversations with their first user request, falling back to the project
+  folder and update time instead of exposing an opaque session identifier.
 
 ### Added
 
