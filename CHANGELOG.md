@@ -5,6 +5,8 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ## Unreleased
 
+## v0.4.1 — 2026-09-18
+
 ### Fixed
 
 - Fall back to the canonical release repository when a build has none embedded,
