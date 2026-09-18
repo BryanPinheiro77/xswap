@@ -6,7 +6,8 @@ support is a future project; discuss its design before implementing a backend.
 
 ## Local setup
 
-Install Go 1.26 or newer. The runtime has no third-party Go dependencies.
+Install Go 1.26.6 or newer. Runtime dependencies are limited to Go-maintained
+`golang.org/x/term` and its `golang.org/x/sys` dependency.
 Real quota queries also require the official Codex CLI and ChatGPT login.
 Tests use temporary profiles and a fake app server; no personal account is needed.
 

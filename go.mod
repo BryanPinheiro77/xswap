@@ -1,6 +1,6 @@
 module xswap
 
-go 1.26.0
+go 1.26.6
 
 require golang.org/x/term v0.46.0
 
