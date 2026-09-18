@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -78,6 +79,115 @@ func TestSessionsInProjectAndTransfer(t *testing.T) {
 	}
 	if _, _, err = a.copySession("default", "work", sessions[0]); err == nil {
 		t.Fatal("overwrote conflicting destination")
+	}
+}
+
+func appendSessionEvent(t *testing.T, path, message string) {
+	t.Helper()
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, writeErr := fmt.Fprintf(file, "{\"type\":\"event_msg\",\"payload\":{\"type\":\"user_message\",\"message\":%q}}\n", message)
+	closeErr := file.Close()
+	if writeErr != nil {
+		t.Fatal(writeErr)
+	}
+	if closeErr != nil {
+		t.Fatal(closeErr)
+	}
+}
+
+func TestSessionTransferFastForwardsRoundTripAndRejectsDivergence(t *testing.T) {
+	a := fixture(t)
+	ready(t, a, "work")
+	a.SessionIndexer = func(string, string) error { return nil }
+	project := t.TempDir()
+	id := "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+	originalPath := writeTestSession(t, a.DefaultHome, "2026/09/17", id, project, "start")
+	original, err := readSession(originalPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workPath, copied, err := a.copySession("default", "work", original)
+	if err != nil || !copied {
+		t.Fatal(workPath, copied, err)
+	}
+
+	appendSessionEvent(t, workPath, "continued in work")
+	if _, copied, err = a.copySession("default", "work", original); err != nil || copied {
+		t.Fatal("did not preserve destination that was already ahead", copied, err)
+	}
+	workSession, err := readSession(workPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, copied, err = a.copySession("work", "default", workSession); err != nil || !copied {
+		t.Fatal("failed to fast-forward original account", copied, err)
+	}
+	assertSameFile(t, originalPath, workPath)
+
+	appendSessionEvent(t, originalPath, "continued back in default")
+	original, err = readSession(originalPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, copied, err = a.copySession("default", "work", original); err != nil || !copied {
+		t.Fatal("failed to fast-forward work account", copied, err)
+	}
+	assertSameFile(t, originalPath, workPath)
+
+	appendSessionEvent(t, originalPath, "default branch")
+	appendSessionEvent(t, workPath, "work branch")
+	original, err = readSession(originalPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err = a.copySession("default", "work", original); err == nil || !strings.Contains(err.Error(), "diverged") {
+		t.Fatal("accepted divergent session histories", err)
+	}
+}
+
+func TestSessionFastForwardRestoresDestinationWhenIndexingFails(t *testing.T) {
+	a := fixture(t)
+	ready(t, a, "work")
+	a.SessionIndexer = func(string, string) error { return nil }
+	project := t.TempDir()
+	id := "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+	sourcePath := writeTestSession(t, a.DefaultHome, "2026/09/17", id, project, "start")
+	session, err := readSession(sourcePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	destination, _, err := a.copySession("default", "work", session)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(destination)
+	if err != nil {
+		t.Fatal(err)
+	}
+	appendSessionEvent(t, sourcePath, "new message")
+	session, err = readSession(sourcePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.SessionIndexer = func(string, string) error { return errors.New("index failed") }
+	if _, _, err = a.copySession("default", "work", session); err == nil || !strings.Contains(err.Error(), "index updated session") {
+		t.Fatal("ignored update indexing failure", err)
+	}
+	after, err := os.ReadFile(destination)
+	if err != nil || string(after) != string(before) {
+		t.Fatal("failed to restore destination after indexing error", err)
+	}
+}
+
+func assertSameFile(t *testing.T, left, right string) {
+	t.Helper()
+	leftData, leftErr := os.ReadFile(left)
+	rightData, rightErr := os.ReadFile(right)
+	if leftErr != nil || rightErr != nil || string(leftData) != string(rightData) {
+		t.Fatal("session files differ", leftErr, rightErr)
 	}
 }
 

@@ -2,9 +2,8 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -214,17 +213,48 @@ func sessionsInProject(home, project string) ([]codexSession, error) {
 	return sessions, nil
 }
 
-func fileDigest(path string) (string, error) {
-	file, err := os.Open(path)
+func fileIsPrefix(prefixPath, fullPath string) (bool, error) {
+	prefix, err := os.Open(prefixPath)
 	if err != nil {
-		return "", err
+		return false, err
 	}
-	defer file.Close()
-	hash := sha256.New()
-	if _, err = io.Copy(hash, file); err != nil {
-		return "", err
+	defer prefix.Close()
+	full, err := os.Open(fullPath)
+	if err != nil {
+		return false, err
 	}
-	return hex.EncodeToString(hash.Sum(nil)), nil
+	defer full.Close()
+	prefixInfo, err := prefix.Stat()
+	if err != nil {
+		return false, err
+	}
+	fullInfo, err := full.Stat()
+	if err != nil {
+		return false, err
+	}
+	if prefixInfo.Size() > fullInfo.Size() {
+		return false, nil
+	}
+	left := make([]byte, 64<<10)
+	right := make([]byte, len(left))
+	remaining := prefixInfo.Size()
+	for remaining > 0 {
+		size := int64(len(left))
+		if remaining < size {
+			size = remaining
+		}
+		if _, err = io.ReadFull(prefix, left[:size]); err != nil {
+			return false, err
+		}
+		if _, err = io.ReadFull(full, right[:size]); err != nil {
+			return false, err
+		}
+		if !bytes.Equal(left[:size], right[:size]) {
+			return false, nil
+		}
+		remaining -= size
+	}
+	return true, nil
 }
 
 func safeDestinationParent(root, parent string) error {
@@ -258,6 +288,52 @@ func safeDestinationParent(root, parent string) error {
 	return nil
 }
 
+func (a *App) syncExistingSession(target string, session codexSession, destination string, destinationInfo os.FileInfo) (bool, error) {
+	existing, err := readSession(destination)
+	if err != nil || existing.ID != session.ID {
+		return false, errors.New("existing destination session is invalid")
+	}
+	destinationPrefix, err := fileIsPrefix(destination, session.Path)
+	if err != nil {
+		return false, errors.New("cannot compare existing destination session")
+	}
+	if !destinationPrefix {
+		sourcePrefix, prefixErr := fileIsPrefix(session.Path, destination)
+		if prefixErr != nil {
+			return false, errors.New("cannot compare existing destination session")
+		}
+		if sourcePrefix {
+			return false, nil
+		}
+		return false, fmt.Errorf("session %s has diverged between accounts", session.ID)
+	}
+	sourceInfo, err := os.Stat(session.Path)
+	if err != nil {
+		return false, err
+	}
+	if destinationInfo.Size() == sourceInfo.Size() {
+		return false, nil
+	}
+	previous, err := os.ReadFile(destination)
+	if err != nil {
+		return false, err
+	}
+	data, err := os.ReadFile(session.Path)
+	if err != nil {
+		return false, err
+	}
+	if err = atomicWrite(destination, data); err != nil {
+		return false, err
+	}
+	if err = a.indexTransferredSession(target, session.ID); err != nil {
+		if restoreErr := atomicWrite(destination, previous); restoreErr != nil {
+			return false, fmt.Errorf("index updated session: %v; restore previous session: %w", err, restoreErr)
+		}
+		return false, fmt.Errorf("index updated session: %w", err)
+	}
+	return true, nil
+}
+
 func (a *App) copySession(source, target string, session codexSession) (string, bool, error) {
 	sourceHome, err := a.require(source)
 	if err != nil {
@@ -287,15 +363,11 @@ func (a *App) copySession(source, target string, session codexSession) (string, 
 		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
 			return "", false, errors.New("existing destination session is not a regular file")
 		}
-		sourceHash, sourceErr := fileDigest(session.Path)
-		targetHash, targetErr := fileDigest(destination)
-		if sourceErr != nil || targetErr != nil {
-			return "", false, errors.New("cannot compare existing destination session")
+		updated, syncErr := a.syncExistingSession(target, session, destination, info)
+		if syncErr != nil {
+			return "", false, syncErr
 		}
-		if sourceHash != targetHash {
-			return "", false, fmt.Errorf("destination already contains a different session %s", session.ID)
-		}
-		return destination, false, nil
+		return destination, updated, nil
 	} else if !os.IsNotExist(statErr) {
 		return "", false, statErr
 	}

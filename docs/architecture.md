@@ -58,10 +58,11 @@ an unselected conversation, or a session from another project.
 
 Transfers parse the rollout's `session_meta`, require a UUID and an absolute
 working directory inside the project, reject symlinks and path traversal, and
-copy one JSONL file atomically. An existing identical destination is reused;
-a conflicting destination stops the handoff. Codex's `migrate-rollouts` command
-indexes each copied conversation. Authentication, configuration, caches, and
-profile databases are never copied.
+copy one JSONL file atomically. Rollouts are treated as append-only: an older
+identical prefix is safely advanced in either account, while histories that
+changed independently are rejected as divergent. Codex's `migrate-rollouts`
+command indexes each copied or advanced conversation. Authentication,
+configuration, caches, and profile databases are never copied.
 
 ## Quota queries
 
