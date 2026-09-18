@@ -17,6 +17,8 @@ tags; unreleased work stays in this section until a release is prepared.
   interactive startup is not suspended by Unix job control.
 - Let `a` select or clear every conversation in the handoff picker and accept
   either `Enter` or `y` on the final review with mode-specific footer guidance.
+- Associate one selected conversation with the only unidentified managed Codex
+  process in its directory, allowing picker-based `codex resume` sessions to restart.
 - Safely fast-forward append-only session histories when moving a conversation
   back to an account, while rejecting histories changed in both accounts.
 

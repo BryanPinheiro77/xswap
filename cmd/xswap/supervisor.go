@@ -24,8 +24,9 @@ type managedCodex struct {
 }
 
 type handoffRequest struct {
-	Target  string `json:"target"`
-	Project string `json:"project"`
+	Target    string `json:"target"`
+	Project   string `json:"project"`
+	SessionID string `json:"sessionId,omitempty"`
 }
 
 type projectHandoffPlan struct {
@@ -140,6 +141,9 @@ func (a *App) readHandoff(pid int) (handoffRequest, bool, error) {
 	if !filepath.IsAbs(request.Project) {
 		return handoffRequest{}, false, errors.New("handoff project path is invalid")
 	}
+	if request.SessionID != "" && !sessionIDPattern.MatchString(request.SessionID) {
+		return handoffRequest{}, false, errors.New("handoff session id is invalid")
+	}
 	return request, true, nil
 }
 
@@ -188,6 +192,9 @@ func (a *App) superviseCodex(initialAccount string, initialArgs []string) error 
 		_ = os.Remove(a.handoffPath(supervisorPID))
 		if filepath.Clean(request.Project) != filepath.Clean(project) {
 			return errors.New("handoff request does not match the managed project")
+		}
+		if request.SessionID != "" {
+			knownID = request.SessionID
 		}
 		sourceHome, profileErr := a.require(account)
 		if profileErr != nil {
@@ -298,10 +305,41 @@ func filterHandoffPlan(plan projectHandoffPlan, selected map[string]bool) (proje
 	if len(sessions) == 0 {
 		return projectHandoffPlan{}, errors.New("select at least one conversation to continue")
 	}
+	selectedByCWD := map[string][]codexSession{}
+	for _, session := range sessions {
+		cwd := filepath.Clean(session.CWD)
+		selectedByCWD[cwd] = append(selectedByCWD[cwd], session)
+	}
+	unknownByCWD := map[string]int{}
+	for _, record := range plan.Managed {
+		if record.SessionID == "" {
+			unknownByCWD[filepath.Clean(record.CWD)]++
+		}
+	}
 	managed := []managedCodex{}
+	claimed := map[string]bool{}
 	for _, record := range plan.Managed {
 		if selected[record.SessionID] {
 			managed = append(managed, record)
+			claimed[record.SessionID] = true
+		}
+	}
+	for _, record := range plan.Managed {
+		if record.SessionID != "" {
+			continue
+		}
+		cwd := filepath.Clean(record.CWD)
+		candidates := []codexSession{}
+		for _, session := range selectedByCWD[cwd] {
+			if !claimed[session.ID] {
+				candidates = append(candidates, session)
+			}
+		}
+		if unknownByCWD[cwd] == 1 && len(candidates) == 1 {
+			record.SessionID = candidates[0].ID
+			record.SessionPath = candidates[0].Path
+			managed = append(managed, record)
+			claimed[record.SessionID] = true
 		}
 	}
 	plan.Sessions = sessions
@@ -375,7 +413,7 @@ func (a *App) requestProjectHandoff(plan projectHandoffPlan) (projectHandoffResu
 	}
 	written := []string{}
 	for _, record := range plan.Managed {
-		request := handoffRequest{Target: plan.Target, Project: plan.Project}
+		request := handoffRequest{Target: plan.Target, Project: plan.Project, SessionID: record.SessionID}
 		path := a.handoffPath(record.SupervisorPID)
 		if err := writeJSON(path, request); err != nil {
 			for _, pending := range written {

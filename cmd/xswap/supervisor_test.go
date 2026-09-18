@@ -234,3 +234,21 @@ func TestFilterHandoffPlanKeepsOnlyMatchingManagedSessions(t *testing.T) {
 		t.Fatal("accepted a handoff without selected conversations")
 	}
 }
+
+func TestFilterHandoffPlanAssociatesOneUnknownProcessWithOneSelectedSession(t *testing.T) {
+	project := t.TempDir()
+	session := codexSession{ID: "abababab-abab-4bab-8bab-abababababab", CWD: project, Path: "session.jsonl"}
+	plan := projectHandoffPlan{
+		Sessions: []codexSession{session},
+		Managed:  []managedCodex{{CWD: project}},
+	}
+	filtered, err := filterHandoffPlan(plan, map[string]bool{session.ID: true})
+	if err != nil || len(filtered.Managed) != 1 || filtered.Managed[0].SessionID != session.ID {
+		t.Fatal("failed to associate selected session with its only managed process", filtered, err)
+	}
+	plan.Managed = append(plan.Managed, managedCodex{CWD: project})
+	filtered, err = filterHandoffPlan(plan, map[string]bool{session.ID: true})
+	if err != nil || len(filtered.Managed) != 0 {
+		t.Fatal("associated an ambiguous managed process", filtered, err)
+	}
+}
