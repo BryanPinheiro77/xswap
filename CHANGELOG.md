@@ -5,6 +5,8 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ## Unreleased
 
+## v0.4.2 — 2026-09-18
+
 ### Fixed
 
 - Allow an open source conversation started outside XSwap supervision to pass
