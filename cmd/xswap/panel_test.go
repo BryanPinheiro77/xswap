@@ -24,6 +24,9 @@ func TestPanelActionHelperProcess(t *testing.T) {
 	}
 	a := fixture(t)
 	helperCLI(t, a)
+	if os.Getenv("XSWAP_TEST_ACTION") == "remove" {
+		ready(t, a, "work")
+	}
 	if err := writeJSON(a.Root+"/update.json", map[string]string{"Repository": "owner/xswap"}); err != nil {
 		t.Fatal(err)
 	}
@@ -35,6 +38,13 @@ func TestPanelActionHelperProcess(t *testing.T) {
 		t.Fatal(err)
 	}
 	fmt.Println("XSWAP_PANEL_ACTION:" + action)
+	if strings.HasPrefix(action, "remove:") {
+		name := strings.TrimPrefix(action, "remove:")
+		if _, err = a.remove(name); err != nil {
+			t.Fatal(err)
+		}
+		fmt.Println("XSWAP_PANEL_ACCOUNTS:" + strings.Join(a.names(), ","))
+	}
 	if os.Getenv("XSWAP_TEST_ACTION") == "add" {
 		fmt.Println("XSWAP_NEXT_PROMPT")
 		answer, err := bufio.NewReader(os.Stdin).ReadString('\n')
@@ -51,6 +61,10 @@ func TestUpdateSelectionLeavesRealTerminalPanel(t *testing.T) {
 
 func TestAddSelectionHandsInputToNextPrompt(t *testing.T) {
 	testPanelInputHandoff(t, "add")
+}
+
+func TestRemoveSelectionAcceptsOneConfirmationKey(t *testing.T) {
+	testPanelInputHandoff(t, "remove")
 }
 
 func testPanelInputHandoff(t *testing.T, action string) {
@@ -107,6 +121,7 @@ func testPanelInputHandoff(t *testing.T, action string) {
 	}()
 	var output bytes.Buffer
 	selected := false
+	accountSelected := false
 	confirmed := false
 	answered := false
 	for {
@@ -121,13 +136,27 @@ func testPanelInputHandoff(t *testing.T, action string) {
 				down := 6
 				if action == "add" {
 					down = 3
+				} else if action == "remove" {
+					down = 7
 				}
 				if _, err := io.WriteString(stdin, strings.Repeat("\x1b[B", down)+"\r"); err != nil {
 					t.Fatal(err)
 				}
 				selected = true
 			}
+			if action == "remove" && selected && !accountSelected && strings.Contains(output.String(), "remove account") {
+				if _, err := io.WriteString(stdin, "\x1b[B\r"); err != nil {
+					t.Fatal(err)
+				}
+				accountSelected = true
+			}
 			if selected && !confirmed && strings.Contains(output.String(), "Install the available XSwap update?") {
+				if _, err := io.WriteString(stdin, "y"); err != nil {
+					t.Fatal(err)
+				}
+				confirmed = true
+			}
+			if action == "remove" && accountSelected && !confirmed && strings.Contains(output.String(), "Remove work from the account list?") {
 				if _, err := io.WriteString(stdin, "y"); err != nil {
 					t.Fatal(err)
 				}
@@ -144,6 +173,8 @@ func testPanelInputHandoff(t *testing.T, action string) {
 			finished := strings.Contains(output.String(), "XSWAP_PANEL_ACTION:update")
 			if action == "add" {
 				finished = strings.Contains(output.String(), "XSWAP_NEXT_ANSWER:first-input")
+			} else if action == "remove" {
+				finished = strings.Contains(output.String(), "XSWAP_PANEL_ACCOUNTS:default")
 			}
 			if finished {
 				if !strings.Contains(output.String(), "\x1b[?25h\x1b[?1049l") {

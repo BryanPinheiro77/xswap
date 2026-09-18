@@ -5,6 +5,11 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ## Unreleased
 
+### Fixed
+
+- Restore the terminal before removing an account, show removal progress, and
+  accept a single lowercase or uppercase confirmation key in the panel.
+
 ### Changed
 
 - Avoid duplicate CI matrices for feature-branch pushes while preserving full

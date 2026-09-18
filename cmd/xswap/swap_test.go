@@ -280,7 +280,13 @@ func TestPanelMenuWatchBackAndManagement(t *testing.T) {
 	p.Mode = "remove"
 	p.Cursor = 1
 	p.key(a, a.names(), "enter")
-	p.key(a, a.names(), "y")
+	action, err := p.key(a, a.names(), "y")
+	if err != nil || action != "remove:work" {
+		t.Fatal("remove confirmation action", action, err)
+	}
+	if _, err = a.remove("work"); err != nil {
+		t.Fatal(err)
+	}
 	if !reflect.DeepEqual(a.names(), []string{"default"}) {
 		t.Fatal("remove UI", a.names())
 	}
