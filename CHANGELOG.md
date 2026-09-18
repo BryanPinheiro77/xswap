@@ -47,8 +47,9 @@ tags; unreleased work stays in this section until a release is prepared.
   yet published its session identifier.
 - Detect open conversations outside XSwap supervision and stop before copying,
   naming the sessions that must be reopened with `codex resume`.
-- Keep each project picker's conversation count aligned with the source account
-  and the sessions shown on the following screen.
+- Show every unique project conversation across registered accounts, identify
+  its source in the picker, and support one handoff from multiple sources into a
+  selected destination.
 
 ### Security
 

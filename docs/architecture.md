@@ -66,6 +66,10 @@ stored in Codex session metadata across registered profiles. It resolves Git
 roots, ignores missing directories, deduplicates copied conversation IDs, and
 orders projects by recent session activity. Opening the panel inside a project
 skips this discovery step and opens that project's conversations directly.
+Conversation IDs copied between profiles are deduplicated; the longest compatible
+history is used, active managed copies take precedence when safe, and divergent
+copies stop the handoff. A single confirmation can therefore consolidate
+selected conversations from multiple source accounts into one destination.
 
 Repository and directory scopes use `.xswap-account`. Git repositories receive
 a local `/.xswap-account` rule in `.git/info/exclude` before the pin is written;

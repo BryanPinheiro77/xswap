@@ -31,7 +31,7 @@ type handoffRequest struct {
 
 type projectHandoffPlan struct {
 	Project   string
-	Source    string
+	Sources   []string
 	Target    string
 	Sessions  []codexSession
 	Managed   []managedCodex
@@ -39,15 +39,15 @@ type projectHandoffPlan struct {
 }
 
 type sessionProject struct {
-	Root    string
-	Source  string
-	Count   int
-	Updated time.Time
+	Root     string
+	Accounts int
+	Count    int
+	Updated  time.Time
 }
 
 type projectHandoffResult struct {
 	Project      string
-	Source       string
+	Sources      []string
 	Target       string
 	Sessions     int
 	Copied       int
@@ -254,7 +254,11 @@ func (a *App) managedForProject(project string) ([]managedCodex, error) {
 }
 
 func (a *App) sessionProjects() ([]sessionProject, error) {
-	found := map[string]map[string]map[string]codexSession{}
+	type discovered struct {
+		accounts map[string]bool
+		sessions map[string]codexSession
+	}
+	found := map[string]*discovered{}
 	for _, name := range a.names() {
 		home, err := a.require(name)
 		if err != nil {
@@ -270,42 +274,27 @@ func (a *App) sessionProjects() ([]sessionProject, error) {
 				continue
 			}
 			root = filepath.Clean(root)
-			if found[root] == nil {
-				found[root] = map[string]map[string]codexSession{}
+			item := found[root]
+			if item == nil {
+				item = &discovered{accounts: map[string]bool{}, sessions: map[string]codexSession{}}
+				found[root] = item
 			}
-			if found[root][name] == nil {
-				found[root][name] = map[string]codexSession{}
+			item.accounts[name] = true
+			if existing, ok := item.sessions[session.ID]; !ok || session.Updated.After(existing.Updated) {
+				session.Account = name
+				item.sessions[session.ID] = session
 			}
-			found[root][name][session.ID] = session
 		}
 	}
 	projects := make([]sessionProject, 0, len(found))
-	for root, accounts := range found {
-		preferred, err := a.accountForDirectory(root)
-		if err != nil {
-			return nil, err
-		}
-		source := preferred
-		sessions := accounts[source]
-		if len(sessions) == 0 {
-			var latest time.Time
-			for name, candidate := range accounts {
-				for _, session := range candidate {
-					if session.Updated.After(latest) {
-						latest = session.Updated
-						source = name
-						sessions = candidate
-					}
-				}
-			}
-		}
+	for root, item := range found {
 		var updated time.Time
-		for _, session := range sessions {
+		for _, session := range item.sessions {
 			if session.Updated.After(updated) {
 				updated = session.Updated
 			}
 		}
-		projects = append(projects, sessionProject{Root: root, Source: source, Count: len(sessions), Updated: updated})
+		projects = append(projects, sessionProject{Root: root, Accounts: len(item.accounts), Count: len(item.sessions), Updated: updated})
 	}
 	sort.Slice(projects, func(i, j int) bool {
 		if projects[i].Updated.Equal(projects[j].Updated) {
@@ -316,6 +305,27 @@ func (a *App) sessionProjects() ([]sessionProject, error) {
 	return projects, nil
 }
 
+func compatibleSessionCopy(candidates []codexSession) (codexSession, error) {
+	chosen := candidates[0]
+	for _, candidate := range candidates[1:] {
+		chosenPrefix, err := fileIsPrefix(chosen.Path, candidate.Path)
+		if err != nil {
+			return codexSession{}, err
+		}
+		candidatePrefix, err := fileIsPrefix(candidate.Path, chosen.Path)
+		if err != nil {
+			return codexSession{}, err
+		}
+		if !chosenPrefix && !candidatePrefix {
+			return codexSession{}, fmt.Errorf("session %s has diverged between accounts", chosen.ID)
+		}
+		if chosenPrefix && (!candidatePrefix || candidate.Updated.After(chosen.Updated)) {
+			chosen = candidate
+		}
+	}
+	return chosen, nil
+}
+
 func (a *App) projectHandoffSource(directory string) (projectHandoffPlan, error) {
 	project, err := projectRoot(directory)
 	if err != nil {
@@ -324,83 +334,100 @@ func (a *App) projectHandoffSource(directory string) (projectHandoffPlan, error)
 	if err = validateHandoffScope(project); err != nil {
 		return projectHandoffPlan{}, err
 	}
-	source, err := a.accountForDirectory(directory)
-	if err != nil {
-		return projectHandoffPlan{}, err
-	}
-	source, sessions, err := a.handoffSessions(project, source)
-	if err != nil {
-		return projectHandoffPlan{}, err
-	}
-	sourceHome, err := a.require(source)
-	if err != nil {
-		return projectHandoffPlan{}, err
+	accountSessions := map[string][]codexSession{}
+	accountHomes := map[string]string{}
+	variants := map[string][]codexSession{}
+	for _, name := range a.names() {
+		home, profileErr := a.require(name)
+		if profileErr != nil {
+			return projectHandoffPlan{}, profileErr
+		}
+		accountHomes[name] = home
+		sessions, sessionsErr := sessionsInProject(home, project)
+		if sessionsErr != nil {
+			return projectHandoffPlan{}, sessionsErr
+		}
+		for index := range sessions {
+			sessions[index].Account = name
+			variants[sessions[index].ID] = append(variants[sessions[index].ID], sessions[index])
+		}
+		accountSessions[name] = sessions
 	}
 	records, err := a.managedForProject(project)
 	if err != nil {
 		return projectHandoffPlan{}, err
 	}
-	managed := []managedCodex{}
-	managedSessions := map[string]bool{}
-	for _, record := range records {
-		if record.Account != source {
-			continue
-		}
-		session, identifyErr := identifyManagedSessionFromList(sessions, record.CWD, record.SessionID, time.Unix(record.Started, 0))
+	managedBySession := map[string][]managedCodex{}
+	managedKeys := map[string]bool{}
+	for index, record := range records {
+		session, identifyErr := identifyManagedSessionFromList(accountSessions[record.Account], record.CWD, record.SessionID, time.Unix(record.Started, 0))
 		if identifyErr == nil {
 			record.SessionID = session.ID
 			record.SessionPath = session.Path
-			managedSessions[session.ID] = true
+			records[index] = record
+			managedBySession[session.ID] = append(managedBySession[session.ID], record)
+			managedKeys[record.Account+"\x00"+session.ID] = true
 		}
-		managed = append(managed, record)
 	}
+	sessions := make([]codexSession, 0, len(variants))
+	for id, candidates := range variants {
+		managed := managedBySession[id]
+		if len(managed) > 1 {
+			return projectHandoffPlan{}, fmt.Errorf("conversation %s is open in multiple accounts", id)
+		}
+		chosen, compatibleErr := compatibleSessionCopy(candidates)
+		if compatibleErr != nil {
+			return projectHandoffPlan{}, compatibleErr
+		}
+		if len(managed) == 1 {
+			for _, candidate := range candidates {
+				if candidate.Account == managed[0].Account {
+					managedIsCurrent, prefixErr := fileIsPrefix(chosen.Path, candidate.Path)
+					if prefixErr != nil {
+						return projectHandoffPlan{}, prefixErr
+					}
+					if !managedIsCurrent {
+						return projectHandoffPlan{}, fmt.Errorf("open conversation %s in account %s is behind another account copy", id, candidate.Account)
+					}
+					chosen = candidate
+					break
+				}
+			}
+		}
+		sessions = append(sessions, chosen)
+	}
+	sort.Slice(sessions, func(i, j int) bool { return sessions[i].Updated.After(sessions[j].Updated) })
 	unmanaged := []codexSession{}
-	for _, session := range sessions {
-		if managedSessions[session.ID] {
-			continue
-		}
-		open, openErr := a.sessionIsOpen(sourceHome, session.ID)
-		if openErr != nil {
-			return projectHandoffPlan{}, fmt.Errorf("inspect session %s: %w", session.ID, openErr)
-		}
-		if open {
-			unmanaged = append(unmanaged, session)
+	for _, candidates := range variants {
+		for _, session := range candidates {
+			if managedKeys[session.Account+"\x00"+session.ID] {
+				continue
+			}
+			open, openErr := a.sessionIsOpen(accountHomes[session.Account], session.ID)
+			if openErr != nil {
+				return projectHandoffPlan{}, fmt.Errorf("inspect session %s in account %s: %w", session.ID, session.Account, openErr)
+			}
+			if open {
+				unmanaged = append(unmanaged, session)
+			}
 		}
 	}
-	return projectHandoffPlan{Project: project, Source: source, Sessions: sessions, Managed: managed, Unmanaged: unmanaged}, nil
+	return projectHandoffPlan{Project: project, Sources: sessionAccounts(sessions), Sessions: sessions, Managed: records, Unmanaged: unmanaged}, nil
 }
 
-func (a *App) handoffSessions(project, preferred string) (string, []codexSession, error) {
-	home, err := a.require(preferred)
-	if err != nil {
-		return "", nil, err
-	}
-	sessions, err := sessionsInProject(home, project)
-	if err != nil || len(sessions) > 0 {
-		return preferred, sessions, err
-	}
-	selected := preferred
-	for _, name := range a.names() {
-		if name == preferred {
-			continue
-		}
-		home, profileErr := a.require(name)
-		if profileErr != nil {
-			return "", nil, profileErr
-		}
-		candidate, sessionsErr := sessionsInProject(home, project)
-		if sessionsErr != nil {
-			return "", nil, sessionsErr
-		}
-		if len(candidate) == 0 {
-			continue
-		}
-		if len(sessions) == 0 || candidate[0].Updated.After(sessions[0].Updated) {
-			selected = name
-			sessions = candidate
+func sessionAccounts(sessions []codexSession) []string {
+	found := map[string]bool{}
+	for _, session := range sessions {
+		if session.Account != "" {
+			found[session.Account] = true
 		}
 	}
-	return selected, sessions, nil
+	accounts := make([]string, 0, len(found))
+	for name := range found {
+		accounts = append(accounts, name)
+	}
+	sort.Strings(accounts)
+	return accounts
 }
 
 func selectedSessionMap(sessions []codexSession) map[string]bool {
@@ -429,16 +456,17 @@ func filterHandoffPlan(plan projectHandoffPlan, selected map[string]bool) (proje
 		cwd := filepath.Clean(session.CWD)
 		selectedByCWD[cwd] = append(selectedByCWD[cwd], session)
 	}
-	unknownByCWD := map[string]int{}
+	unknownByScope := map[string]int{}
 	for _, record := range plan.Managed {
 		if record.SessionID == "" {
-			unknownByCWD[filepath.Clean(record.CWD)]++
+			unknownByScope[record.Account+"\x00"+filepath.Clean(record.CWD)]++
 		}
 	}
 	managed := []managedCodex{}
 	claimed := map[string]bool{}
 	for _, record := range plan.Managed {
-		if selected[record.SessionID] {
+		session, selectedSession := findSessionByID(sessions, record.SessionID)
+		if selectedSession && session.Account == record.Account {
 			managed = append(managed, record)
 			claimed[record.SessionID] = true
 		}
@@ -450,11 +478,11 @@ func filterHandoffPlan(plan projectHandoffPlan, selected map[string]bool) (proje
 		cwd := filepath.Clean(record.CWD)
 		candidates := []codexSession{}
 		for _, session := range selectedByCWD[cwd] {
-			if !claimed[session.ID] {
+			if session.Account == record.Account && !claimed[session.ID] {
 				candidates = append(candidates, session)
 			}
 		}
-		if unknownByCWD[cwd] == 1 && len(candidates) == 1 {
+		if unknownByScope[record.Account+"\x00"+cwd] == 1 && len(candidates) == 1 {
 			record.SessionID = candidates[0].ID
 			record.SessionPath = candidates[0].Path
 			managed = append(managed, record)
@@ -462,6 +490,7 @@ func filterHandoffPlan(plan projectHandoffPlan, selected map[string]bool) (proje
 		}
 	}
 	plan.Sessions = sessions
+	plan.Sources = sessionAccounts(sessions)
 	plan.Managed = managed
 	unmanaged := []codexSession{}
 	for _, session := range plan.Unmanaged {
@@ -488,11 +517,37 @@ func (a *App) planSelectedProjectHandoff(directory, target string, selected map[
 	if err != nil {
 		return projectHandoffPlan{}, err
 	}
-	if plan.Source == target {
-		return projectHandoffPlan{}, errors.New("project already uses the selected account")
-	}
 	plan.Target = target
-	return filterHandoffPlan(plan, selected)
+	plan, err = filterHandoffPlan(plan, selected)
+	if err != nil {
+		return projectHandoffPlan{}, err
+	}
+	moves := false
+	for _, session := range plan.Sessions {
+		if session.Account != target {
+			moves = true
+			break
+		}
+	}
+	if !moves {
+		return projectHandoffPlan{}, errors.New("selected conversations already use the destination account")
+	}
+	managed := plan.Managed[:0]
+	for _, record := range plan.Managed {
+		if record.Account != target {
+			managed = append(managed, record)
+		}
+	}
+	plan.Managed = managed
+	unmanaged := plan.Unmanaged[:0]
+	for _, session := range plan.Unmanaged {
+		chosen, ok := findSessionByID(plan.Sessions, session.ID)
+		if ok && chosen.Account != target {
+			unmanaged = append(unmanaged, session)
+		}
+	}
+	plan.Unmanaged = unmanaged
+	return plan, nil
 }
 
 func (a *App) planProjectHandoff(directory, target string) (projectHandoffPlan, error) {
@@ -512,33 +567,36 @@ func (a *App) requestProjectHandoff(plan projectHandoffPlan) (projectHandoffResu
 	if err != nil {
 		return projectHandoffResult{}, err
 	}
-	if current.Source != plan.Source {
-		return projectHandoffResult{}, errors.New("project account changed after confirmation; review the switch again")
+	for _, session := range plan.Sessions {
+		currentSession, ok := findSessionByID(current.Sessions, session.ID)
+		if !ok || currentSession.Account != session.Account {
+			return projectHandoffResult{}, errors.New("conversation sources changed after confirmation; review the handoff again")
+		}
 	}
 	plan = current
-	result := projectHandoffResult{Project: plan.Project, Source: plan.Source, Target: plan.Target, Sessions: len(plan.Sessions), Global: isHomeScope(plan.Project)}
+	transferSources := []string{}
+	for _, source := range plan.Sources {
+		if source != plan.Target {
+			transferSources = append(transferSources, source)
+		}
+	}
+	result := projectHandoffResult{Project: plan.Project, Sources: transferSources, Target: plan.Target, Sessions: len(plan.Sessions), Global: isHomeScope(plan.Project)}
 	if len(plan.Unmanaged) > 0 {
 		titles := make([]string, 0, len(plan.Unmanaged))
 		for _, session := range plan.Unmanaged {
-			titles = append(titles, sessionTitle(session, plan.Project))
+			titles = append(titles, sessionTitle(session, plan.Project)+" ("+session.Account+")")
 		}
 		return result, fmt.Errorf("open sessions are outside XSwap supervision: %s; close them, reopen with codex resume, and try again", strings.Join(titles, "; "))
-	}
-	selectedAccounts, err := a.managedForProject(plan.Project)
-	if err != nil {
-		return result, err
-	}
-	for _, record := range selectedAccounts {
-		if record.Account == plan.Target {
-			return result, fmt.Errorf("destination account %q already has a managed Codex process in this project", plan.Target)
-		}
 	}
 	// Prepare every selected conversation before changing the project account or
 	// stopping a terminal. Active source rollouts can append after this snapshot;
 	// their supervisors safely fast-forward them once stopped.
 	changed := map[string]bool{}
 	for _, session := range plan.Sessions {
-		_, copied, copyErr := a.copySession(plan.Source, plan.Target, session)
+		if session.Account == plan.Target {
+			continue
+		}
+		_, copied, copyErr := a.copySession(session.Account, plan.Target, session)
 		if copyErr != nil {
 			return result, copyErr
 		}
@@ -607,19 +665,27 @@ func (a *App) requestProjectHandoff(plan projectHandoffPlan) (projectHandoffResu
 
 	// Every source writer managed by XSwap has stopped or resumed by this point,
 	// so copying the project history cannot race with an append to its rollout.
-	sourceHome, err := a.require(plan.Source)
-	if err != nil {
-		return result, err
-	}
-	sessions, err := sessionsInProject(sourceHome, plan.Project)
-	if err != nil {
-		return result, err
-	}
-	for _, session := range sessions {
-		if !selected[session.ID] {
+	refreshed := map[string][]codexSession{}
+	for _, session := range plan.Sessions {
+		if session.Account == plan.Target {
 			continue
 		}
-		_, copied, copyErr := a.copySession(plan.Source, plan.Target, session)
+		if _, ok := refreshed[session.Account]; !ok {
+			sourceHome, sourceErr := a.require(session.Account)
+			if sourceErr != nil {
+				return result, sourceErr
+			}
+			refreshed[session.Account], sourceErr = sessionsInProject(sourceHome, plan.Project)
+			if sourceErr != nil {
+				return result, sourceErr
+			}
+		}
+		latest, ok := findSessionByID(refreshed[session.Account], session.ID)
+		if !ok {
+			return result, fmt.Errorf("session %s disappeared from account %s", session.ID, session.Account)
+		}
+		latest.Account = session.Account
+		_, copied, copyErr := a.copySession(session.Account, plan.Target, latest)
 		if copyErr != nil {
 			return result, copyErr
 		}

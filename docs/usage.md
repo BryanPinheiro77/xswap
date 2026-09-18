@@ -48,9 +48,10 @@ Choose **Continue sessions with another account…** in the panel, or run
 
 1. when opened from the user home, select from existing projects discovered in
    Codex session metadata; directories without conversations are not listed,
-   and each row shows the source account and its conversation count;
+   and each row counts unique conversations across registered accounts;
 2. inside a project, skip that picker and show its conversations directly;
-3. show the chosen project's conversations, all selected initially;
+3. show the chosen project's deduplicated conversations from every account,
+   label each source account, and select all initially;
 4. use `Space` to toggle one conversation, `a` to select or clear all, and
    `Enter` to continue;
 5. select the destination account; and
@@ -64,7 +65,8 @@ again. Closed conversations can be copied without being reopened first.
 
 After confirmation XSwap:
 
-1. validates, copies, and indexes a safe snapshot of every selected conversation;
+1. validates, copies, and indexes a safe snapshot of every selected conversation
+   from its source account into the chosen destination;
 2. pins the destination account for the project, or updates the global account
    for a home-scoped handoff;
 3. stops only selected Codex child processes supervised by the XSwap wrapper;

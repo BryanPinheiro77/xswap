@@ -135,7 +135,8 @@ type Panel struct {
 	Due                                   time.Time
 	Width, Height                         int
 	HandoffManaged                        int
-	HandoffProject, HandoffSource         string
+	HandoffProject                        string
+	HandoffSources                        []string
 	HandoffProjects                       []sessionProject
 	HandoffSessions                       []codexSession
 	HandoffSelected, HandoffRunning       map[string]bool
@@ -204,7 +205,7 @@ func (p *Panel) selectedUnmanagedSessions() []codexSession {
 
 func (p *Panel) useHandoffPlan(plan projectHandoffPlan) {
 	p.HandoffProject = plan.Project
-	p.HandoffSource = plan.Source
+	p.HandoffSources = plan.Sources
 	p.HandoffSessions = plan.Sessions
 	p.HandoffSelected = map[string]bool{}
 	p.HandoffRunning = map[string]bool{}
@@ -253,7 +254,7 @@ func projectLabel(path string) string {
 	return filepath.Clean(path)
 }
 
-func (p *Panel) projectLines(a *App) ([]string, int) {
+func (p *Panel) projectLines() ([]string, int) {
 	lines := []string{}
 	chosen := 0
 	for index, project := range p.HandoffProjects {
@@ -272,7 +273,11 @@ func (p *Panel) projectLines(a *App) ([]string, int) {
 		if project.Count == 1 {
 			conversation = "conversation"
 		}
-		meta := fmt.Sprintf("     %s  ·  %d %s from %s  ·  last used %s", clean(projectLabel(project.Root)), project.Count, conversation, clean(a.displayName(project.Source)), project.Updated.Format("Jan 02 15:04"))
+		accounts := fmt.Sprintf("across %d accounts", project.Accounts)
+		if project.Accounts == 1 {
+			accounts = "in 1 account"
+		}
+		meta := fmt.Sprintf("     %s  ·  %d %s %s  ·  last used %s", clean(projectLabel(project.Root)), project.Count, conversation, accounts, project.Updated.Format("Jan 02 15:04"))
 		lines = append(lines, title, muted+meta+reset, "")
 	}
 	return lines, chosen
@@ -293,7 +298,7 @@ func sessionTitle(session codexSession, project string) string {
 	return clean(title)
 }
 
-func (p *Panel) sessionLines() ([]string, int) {
+func (p *Panel) sessionLines(a *App) ([]string, int) {
 	lines := []string{}
 	chosen := 0
 	for index, session := range p.HandoffSessions {
@@ -308,7 +313,7 @@ func (p *Panel) sessionLines() ([]string, int) {
 		if index == p.Cursor {
 			title = highlight + accent(p.Theme) + " ▌ " + strings.TrimSpace(title) + reset
 		}
-		meta := session.Updated.Format("Jan 02 15:04")
+		meta := session.Updated.Format("Jan 02 15:04") + "  ·  from " + a.displayName(session.Account)
 		if p.HandoffRunning[session.ID] {
 			meta += "  ·  running"
 		} else if p.HandoffUnmanaged[session.ID] {
@@ -521,14 +526,18 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 		}
 	}
 	if p.Mode == "session-select" {
-		rows[1] = muted + "  from " + clean(a.displayName(p.HandoffSource)) + "  ·  project " + clean(filepath.Base(p.HandoffProject)) + reset
+		sources := make([]string, 0, len(p.HandoffSources))
+		for _, source := range p.HandoffSources {
+			sources = append(sources, clean(a.displayName(source)))
+		}
+		rows[1] = muted + "  from " + strings.Join(sources, ", ") + "  ·  project " + clean(filepath.Base(p.HandoffProject)) + reset
 	}
 	lines, chosen := p.accountLines(a, names, s, now)
 	if p.Mode == "project-select" {
-		lines, chosen = p.projectLines(a)
+		lines, chosen = p.projectLines()
 	}
 	if p.Mode == "session-select" {
-		lines, chosen = p.sessionLines()
+		lines, chosen = p.sessionLines(a)
 	}
 	if p.Mode == "auto" {
 		lines = p.autoLines(a, s, now)
@@ -545,11 +554,16 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 	}
 	if p.Mode == "confirm-project-switch" {
 		selected := p.selectedSessions()
+		sources := make([]string, 0, len(p.HandoffSources))
+		for _, source := range p.HandoffSources {
+			sources = append(sources, clean(a.displayName(source)))
+		}
 		scope := muted + "  Other projects and unselected sessions are not changed." + reset
 		if isHomeScope(p.HandoffProject) {
 			scope = "\x1b[33m  Global account: new Codex processes in unpinned directories will use this account." + reset
 		}
-		lines = []string{"", bold + "  Continue sessions from " + clean(a.displayName(p.HandoffSource)) + " with " + clean(a.displayName(p.Pending)) + "?" + reset,
+		lines = []string{"", bold + fmt.Sprintf("  Continue %d selected session(s) with %s?", len(selected), clean(a.displayName(p.Pending))) + reset,
+			muted + "  Sources: " + strings.Join(sources, ", ") + reset,
 			muted + "  Scope: " + clean(filepath.Base(p.HandoffProject)) + reset,
 			muted + fmt.Sprintf("  Selected conversations: %d", len(selected)) + reset}
 		for _, session := range selected {
@@ -890,10 +904,19 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 			} else {
 				p.Mode = "project-switch"
 				p.Cursor = 0
-				for index, name := range names {
-					if name != p.HandoffSource {
-						p.Cursor = index
-						break
+				if len(p.HandoffSources) == 1 {
+					for index, name := range names {
+						if name != p.HandoffSources[0] {
+							p.Cursor = index
+							break
+						}
+					}
+				} else {
+					for index, name := range names {
+						if name == a.selected() {
+							p.Cursor = index
+							break
+						}
 					}
 				}
 				p.Offset = 0
@@ -925,7 +948,7 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 			} else {
 				p.Pending = names[p.Cursor]
 				p.HandoffProject = plan.Project
-				p.HandoffSource = plan.Source
+				p.HandoffSources = plan.Sources
 				p.HandoffManaged = len(plan.Managed)
 				p.Mode = "confirm-project-switch"
 				p.Offset = 0

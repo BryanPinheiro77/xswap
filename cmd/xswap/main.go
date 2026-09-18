@@ -371,7 +371,7 @@ func (a *App) projectCommand(args []string) error {
 			if !interactive() {
 				return errors.New("use --yes to confirm a project account switch in scripts")
 			}
-			fmt.Printf("Switch %s from %s to %s, copy %d conversation(s), and restart %d managed session(s)? [y/N] ", plan.Project, plan.Source, plan.Target, len(plan.Sessions), len(plan.Managed))
+			fmt.Printf("Switch %s sessions from %s to %s, copy %d conversation(s), and restart %d managed session(s)? [y/N] ", plan.Project, strings.Join(plan.Sources, ", "), plan.Target, len(plan.Sessions), len(plan.Managed))
 			answer, _ := bufio.NewReader(os.Stdin).ReadString('\n')
 			if strings.ToLower(strings.TrimSpace(answer)) != "y" {
 				fmt.Println("Project switch cancelled.")
@@ -418,7 +418,11 @@ func handoffAccountLabel(a *App, name string) string {
 }
 
 func printProjectHandoffResult(a *App, result projectHandoffResult) {
-	fmt.Printf("Account handoff: %s → %s.\n", handoffAccountLabel(a, result.Source), handoffAccountLabel(a, result.Target))
+	sources := make([]string, 0, len(result.Sources))
+	for _, source := range result.Sources {
+		sources = append(sources, handoffAccountLabel(a, source))
+	}
+	fmt.Printf("Account handoff: %s → %s.\n", strings.Join(sources, ", "), handoffAccountLabel(a, result.Target))
 	if result.Global {
 		fmt.Println("Global selection updated for unpinned directories.")
 	} else {

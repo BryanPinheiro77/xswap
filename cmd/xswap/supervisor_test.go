@@ -86,6 +86,61 @@ func TestProjectHandoffCopiesAllProjectSessionsAndPinsTarget(t *testing.T) {
 	}
 }
 
+func TestProjectHandoffCombinesSessionsFromMultipleAccounts(t *testing.T) {
+	a := fixture(t)
+	ready(t, a, "work")
+	ready(t, a, "other")
+	project := t.TempDir()
+	defaultID := "18181818-1818-4818-8818-181818181818"
+	workID := "19191919-1919-4919-8919-191919191919"
+	writeTestSession(t, a.DefaultHome, "2026/09/17", defaultID, project, "from default")
+	workHome, _ := a.profile("work")
+	writeTestSession(t, workHome, "2026/09/18", workID, project, "from work")
+	indexed := map[string]bool{}
+	a.SessionIndexer = func(account, id string) error {
+		indexed[account+":"+id] = true
+		return nil
+	}
+	plan, err := a.planProjectHandoff(project, "other")
+	if err != nil || len(plan.Sessions) != 2 || strings.Join(plan.Sources, ",") != "default,work" {
+		t.Fatal("multi-account sessions were not combined", plan, err)
+	}
+	result, err := a.requestProjectHandoff(plan)
+	if err != nil || result.Copied != 2 || result.Sessions != 2 {
+		t.Fatal(result, err)
+	}
+	otherHome, _ := a.profile("other")
+	sessions, err := sessionsInProject(otherHome, project)
+	if err != nil || len(sessions) != 2 {
+		t.Fatal("destination did not receive every source account session", sessions, err)
+	}
+	if !indexed["other:"+defaultID] || !indexed["other:"+workID] {
+		t.Fatal("transferred sessions were not indexed", indexed)
+	}
+}
+
+func TestProjectHandoffKeepsSessionsAlreadyInDestination(t *testing.T) {
+	a := fixture(t)
+	ready(t, a, "work")
+	a.SessionIndexer = func(string, string) error { return nil }
+	project := t.TempDir()
+	writeTestSession(t, a.DefaultHome, "2026/09/17", "20202020-2020-4020-8020-202020202020", project, "already in default")
+	workHome, _ := a.profile("work")
+	writeTestSession(t, workHome, "2026/09/18", "21212121-2121-4121-8121-212121212121", project, "move from work")
+	plan, err := a.planProjectHandoff(project, "default")
+	if err != nil || len(plan.Sessions) != 2 {
+		t.Fatal(plan, err)
+	}
+	result, err := a.requestProjectHandoff(plan)
+	if err != nil || result.Copied != 1 || result.Already != 1 {
+		t.Fatal(result, err)
+	}
+	sessions, err := sessionsInProject(a.DefaultHome, project)
+	if err != nil || len(sessions) != 2 {
+		t.Fatal("destination did not retain and combine sessions", sessions, err)
+	}
+}
+
 func TestProjectHandoffFindsProjectSessionsOutsideSelectedAccount(t *testing.T) {
 	a := fixture(t)
 	ready(t, a, "work")
@@ -99,7 +154,7 @@ func TestProjectHandoffFindsProjectSessionsOutsideSelectedAccount(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if plan.Source != "default" || len(plan.Sessions) != 1 || plan.Sessions[0].ID != id {
+	if len(plan.Sources) != 1 || plan.Sources[0] != "default" || len(plan.Sessions) != 1 || plan.Sessions[0].ID != id {
 		t.Fatal("did not find the project's conversation in its actual account", plan)
 	}
 }
@@ -135,16 +190,16 @@ func TestSessionProjectsComeOnlyFromExistingCodexSessions(t *testing.T) {
 		t.Fatal(err)
 	}
 	counts := map[string]int{}
-	sources := map[string]string{}
+	accounts := map[string]int{}
 	for _, project := range projects {
 		counts[project.Root] = project.Count
-		sources[project.Root] = project.Source
+		accounts[project.Root] = project.Accounts
 	}
-	if counts[first] != 1 || counts[second] != 1 {
-		t.Fatal("project counts did not match the selected source account", counts)
+	if counts[first] != 2 || counts[second] != 1 {
+		t.Fatal("project counts did not include unique sessions from every account", counts)
 	}
-	if sources[first] != "work" || sources[second] != "default" {
-		t.Fatal("project source accounts did not match handoff selection", sources)
+	if accounts[first] != 2 || accounts[second] != 1 {
+		t.Fatal("project account counts were incorrect", accounts)
 	}
 	if _, ok := counts[unused]; ok {
 		t.Fatal("directory without Codex sessions was listed")
@@ -222,11 +277,7 @@ func TestProjectHandoffRejectsDivergenceBeforeChangingProjectAccount(t *testing.
 	}
 	appendSessionEvent(t, sourcePath, "continued in default")
 	appendSessionEvent(t, destination, "continued in work")
-	plan, err := a.planProjectHandoff(project, "work")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err = a.requestProjectHandoff(plan); err == nil || !strings.Contains(err.Error(), "diverged") {
+	if _, err = a.planProjectHandoff(project, "work"); err == nil || !strings.Contains(err.Error(), "diverged") {
 		t.Fatal("handoff accepted divergent histories", err)
 	}
 	if selected, selectionErr := a.accountForDirectory(project); selectionErr != nil || selected != "default" {
@@ -356,6 +407,33 @@ func TestHomePanelSelectsProjectBeforeSessions(t *testing.T) {
 	}
 	if _, err := p.key(a, names, "enter"); err != nil || p.Mode != "session-select" || p.HandoffProject != project {
 		t.Fatal("project picker did not open its conversations", p.Mode, p.HandoffProject, err)
+	}
+}
+
+func TestPanelShowsProjectSessionsFromEveryAccount(t *testing.T) {
+	a := fixture(t)
+	ready(t, a, "work")
+	project := t.TempDir()
+	writeTestSession(t, a.DefaultHome, "2026/09/17", "22222222-3333-4333-8333-222222222222", project, "personal conversation")
+	workHome, _ := a.profile("work")
+	writeTestSession(t, workHome, "2026/09/18", "23232323-2323-4323-8323-232323232323", project, "work conversation")
+	t.Chdir(project)
+	p := Panel{Mode: "home", Records: map[string]Record{}, Width: 100, Height: 30}
+	names := a.names()
+	for index, item := range p.menu() {
+		if item == "Continue sessions with another account…" {
+			p.MenuCursor = index
+		}
+	}
+	if _, err := p.key(a, names, "enter"); err != nil || p.Mode != "session-select" || len(p.HandoffSessions) != 2 {
+		t.Fatal("panel did not combine account sessions", p.Mode, len(p.HandoffSessions), err)
+	}
+	s, _ := a.settings()
+	view := stripANSI(p.render(a, names, s, time.Now()))
+	for _, phrase := range []string{"personal conversation", "work conversation", "from default", "from work"} {
+		if !strings.Contains(view, phrase) {
+			t.Fatalf("multi-account picker omitted %q:\n%s", phrase, view)
+		}
 	}
 }
 

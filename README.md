@@ -94,9 +94,10 @@ selects; Esc goes back.
 not move conversations. Inside a project, **Continue sessions with another
 account…** immediately lists that project's conversations. From the user home,
 it first lists only existing projects found in Codex session metadata; XSwap does
-not scan every directory on the computer. Each row identifies the source account
-and counts the conversations that the next screen will show. After choosing a
-project, every conversation is selected initially. Use `Space` to toggle one conversation, `a`
+not scan every directory on the computer. Each row counts unique conversations
+across every registered account. After choosing a project, the session picker
+shows that complete deduplicated list and identifies each conversation's source
+account. Every conversation is selected initially. Use `Space` to toggle one conversation, `a`
 to select or clear all, and `Enter` to choose the destination account. The final review shows
 the selected conversations and how many open managed sessions will restart. An
 open conversation that was started outside the XSwap wrapper is identified by
@@ -109,9 +110,11 @@ Project selection is stored in `.xswap-account` at the repository root; the
 nearest file wins in nested directories. XSwap adds it to the repository's
 local `.git/info/exclude`, preventing accidental commits without changing the
 project's `.gitignore`. Original conversation files remain in the source
-profile. XSwap copies no authentication, config, cache, or unselected session
-data during a handoff. The CLI command `xswap project switch NAME` selects every
-conversation in the project for non-panel workflows.
+profile. Selected conversations may come from multiple source accounts and are
+copied into the chosen destination together. XSwap copies no authentication,
+config, cache, or unselected session data during a handoff. The CLI command
+`xswap project switch NAME` selects every conversation in the project for
+non-panel workflows.
 
 A confirmed project handoff also makes the destination the account used by
 future `codex` processes in that project. A handoff from the user home updates
