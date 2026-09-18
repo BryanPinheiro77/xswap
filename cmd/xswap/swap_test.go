@@ -225,7 +225,11 @@ func TestPanelMenuWatchBackAndManagement(t *testing.T) {
 			t.Fatal("missing menu item", label)
 		}
 	}
-	p.MenuCursor = 4
+	for index, item := range p.menu() {
+		if item == "Rename account…" {
+			p.MenuCursor = index
+		}
+	}
 	p.key(a, a.names(), "enter")
 	if p.Mode != "rename" {
 		t.Fatal("rename did not open account selector", p.Mode)
@@ -255,7 +259,11 @@ func TestPanelMenuWatchBackAndManagement(t *testing.T) {
 	if p.Mode != "home" {
 		t.Fatal(p.Mode)
 	}
-	p.MenuCursor = 5
+	for index, item := range p.menu() {
+		if item == "Disable / enable account…" {
+			p.MenuCursor = index
+		}
+	}
 	p.key(a, a.names(), "enter")
 	p.Cursor = 1
 	p.key(a, a.names(), "enter")

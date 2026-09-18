@@ -8,6 +8,7 @@ import (
 	"math"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"syscall"
@@ -84,6 +85,22 @@ func (a *App) dashboard(mode, filter string, interval int) error {
 			mode = "home"
 			continue
 		}
+		if strings.HasPrefix(action, "project-handoff:") {
+			target := strings.TrimPrefix(action, "project-handoff:")
+			fmt.Println("Switching the project account and transferring its conversations…")
+			plan, planErr := a.planProjectHandoff(currentDirectory(), target)
+			if planErr != nil {
+				fmt.Println("Project switch failed:", planErr)
+			} else if result, handoffErr := a.requestProjectHandoff(plan); handoffErr != nil {
+				fmt.Println("Project switch failed:", handoffErr)
+			} else {
+				printProjectHandoffResult(result)
+			}
+			fmt.Print("\nPress Enter to return to the menu.")
+			bufio.NewReader(os.Stdin).ReadString('\n')
+			mode = "home"
+			continue
+		}
 		if action != "add" {
 			return nil
 		}
@@ -115,16 +132,21 @@ type Panel struct {
 	UpdateAvailable                       bool
 	Due                                   time.Time
 	Width, Height                         int
+	HandoffSessions, HandoffManaged       int
+	HandoffProject, HandoffSource         string
 }
 
-var menuItems = []string{"Switch account…", "Watch accounts", "Auto-switch view", "Add account…", "Rename account…", "Disable / enable account…", "Remove account…", "Theme…", "Quit"}
+var menuItems = []string{"Switch account…", "Switch project account…", "Watch accounts", "Auto-switch view", "Add account…", "Rename account…", "Disable / enable account…", "Remove account…", "Theme…", "Quit"}
 
 func (p *Panel) menu() []string {
-	items := append([]string{}, menuItems[:6]...)
-	if p.UpdateAvailable {
-		items = append(items, "Update version…")
+	items := []string{}
+	for _, item := range menuItems {
+		if item == "Remove account…" && p.UpdateAvailable {
+			items = append(items, "Update version…")
+		}
+		items = append(items, item)
 	}
-	return append(items, menuItems[6:]...)
+	return items
 }
 
 func quotaLine(item QuotaItem, width int, now time.Time) string {
@@ -191,7 +213,7 @@ func (p *Panel) accountLines(a *App, names []string, s Settings, now time.Time) 
 				}
 			}
 		}
-		if (p.Mode == "switch" || p.Mode == "rename" || p.Mode == "disable" || p.Mode == "remove") && index == p.Cursor {
+		if (p.Mode == "switch" || p.Mode == "project-switch" || p.Mode == "rename" || p.Mode == "disable" || p.Mode == "remove") && index == p.Cursor {
 			title = highlight + " ▌" + strings.TrimPrefix(stripANSI(title), "  ") + reset
 		}
 		lines = append(lines, title)
@@ -297,7 +319,7 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 		rows[0] = "Resize the terminal to at least 50×20. Press q to quit."
 		return renderRows(rows, p.Width)
 	}
-	heading := map[string]string{"home": "xswap", "watch": "watching all accounts", "auto": "auto-switch view", "switch": "select account", "rename": "select account to rename", "rename-input": "rename account", "disable": "disable / enable account", "remove": "remove account", "confirm": "confirm removal", "confirm-update": "confirm update"}[p.Mode]
+	heading := map[string]string{"home": "xswap", "watch": "watching all accounts", "auto": "auto-switch view", "switch": "select account", "project-switch": "select the project's new account", "rename": "select account to rename", "rename-input": "rename account", "disable": "disable / enable account", "remove": "remove account", "confirm": "confirm removal", "confirm-update": "confirm update", "confirm-project-switch": "confirm project account switch"}[p.Mode]
 	if p.Mode == "home" {
 		heading += " " + clean(version)
 	}
@@ -309,6 +331,16 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 		status = fmt.Sprintf("refresh in %ds", max(0, int(p.Due.Sub(now).Seconds())))
 	}
 	rows[0] = muted + "  " + heading + "  ·  " + status + reset
+	if p.Mode == "home" {
+		if root, err := projectRoot(currentDirectory()); err == nil {
+			projectName := filepath.Base(root)
+			if selection, found, selectionErr := a.projectSelection(currentDirectory()); selectionErr == nil && found {
+				rows[1] = muted + "  project " + clean(projectName) + "  ·  account " + clean(a.displayName(selection.Account)) + reset
+			} else {
+				rows[1] = muted + "  project " + clean(projectName) + "  ·  follows global account" + reset
+			}
+		}
+	}
 	lines, chosen := p.accountLines(a, names, s, now)
 	if p.Mode == "auto" {
 		lines = p.autoLines(a, s, now)
@@ -323,6 +355,12 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 		}
 		lines = []string{"", bold + "  Install the available XSwap update?" + reset, muted + "  The update will be installed with " + method + "." + reset, "", accent(p.Theme) + "  y Confirm update   esc Cancel" + reset}
 	}
+	if p.Mode == "confirm-project-switch" {
+		lines = []string{"", bold + "  Switch " + clean(filepath.Base(p.HandoffProject)) + " from " + clean(a.displayName(p.HandoffSource)) + " to " + clean(a.displayName(p.Pending)) + "?" + reset,
+			muted + fmt.Sprintf("  Copy %d project conversation(s) to the destination account.", p.HandoffSessions) + reset,
+			muted + fmt.Sprintf("  Restart and resume %d currently managed Codex session(s).", p.HandoffManaged) + reset,
+			muted + "  Other projects and unmanaged terminal processes are not changed." + reset, "", accent(p.Theme) + "  y Confirm project switch   esc Cancel" + reset}
+	}
 	if p.Mode == "rename-input" {
 		lines = append(lines, "", bold+"  Display name: "+p.Input+"█"+reset, muted+"  Type a name, or leave it empty to use the e-mail. Enter saves; Esc cancels."+reset)
 	}
@@ -331,7 +369,7 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 		menuItems := p.menu()
 		available = max(1, p.Height-len(menuItems)-11)
 	}
-	if p.Mode == "switch" || p.Mode == "disable" || p.Mode == "remove" {
+	if p.Mode == "switch" || p.Mode == "project-switch" || p.Mode == "disable" || p.Mode == "remove" {
 		if chosen < p.Offset || chosen >= p.Offset+available {
 			p.Offset = chosen
 		}
@@ -411,6 +449,12 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 		}
 		return "", nil
 	}
+	if p.Mode == "confirm-project-switch" {
+		if key == "y" {
+			return "project-handoff:" + p.Pending, nil
+		}
+		return "", nil
+	}
 	if p.Mode == "rename-input" {
 		if key == "backspace" || key == "delete" {
 			if len(p.Input) > 0 {
@@ -480,7 +524,7 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 	case "down", "j":
 		if p.Mode == "home" {
 			p.MenuCursor = (p.MenuCursor + 1) % len(p.menu())
-		} else if p.Mode == "switch" || p.Mode == "rename" || p.Mode == "disable" || p.Mode == "remove" {
+		} else if p.Mode == "switch" || p.Mode == "project-switch" || p.Mode == "rename" || p.Mode == "disable" || p.Mode == "remove" {
 			p.Cursor = min(p.Cursor+1, len(names)-1)
 		} else {
 			p.Offset++
@@ -488,7 +532,7 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 	case "up", "k":
 		if p.Mode == "home" {
 			p.MenuCursor = (p.MenuCursor + len(p.menu()) - 1) % len(p.menu())
-		} else if p.Mode == "switch" || p.Mode == "rename" || p.Mode == "disable" || p.Mode == "remove" {
+		} else if p.Mode == "switch" || p.Mode == "project-switch" || p.Mode == "rename" || p.Mode == "disable" || p.Mode == "remove" {
 			p.Cursor = max(0, p.Cursor-1)
 		} else {
 			p.Offset = max(0, p.Offset-1)
@@ -510,6 +554,8 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 			switch p.menu()[p.MenuCursor] {
 			case "Switch account…":
 				p.Mode = "switch"
+			case "Switch project account…":
+				p.Mode = "project-switch"
 			case "Watch accounts":
 				p.Mode = "watch"
 			case "Auto-switch view":
@@ -539,6 +585,19 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 					p.Message = "Explicit CODEX_HOME takes priority; unset it to apply the selection."
 				}
 				p.Mode = "home"
+				p.Offset = 0
+			}
+		} else if p.Mode == "project-switch" {
+			plan, err := a.planProjectHandoff(currentDirectory(), names[p.Cursor])
+			if err != nil {
+				p.Message = err.Error()
+			} else {
+				p.Pending = names[p.Cursor]
+				p.HandoffProject = plan.Project
+				p.HandoffSource = plan.Source
+				p.HandoffSessions = len(plan.Sessions)
+				p.HandoffManaged = len(plan.Managed)
+				p.Mode = "confirm-project-switch"
 				p.Offset = 0
 			}
 		} else if p.Mode == "rename" {
@@ -783,7 +842,7 @@ func (a *App) panel(mode, filter string, interval int) (string, error) {
 			if err != nil {
 				p.Message = err.Error()
 			}
-			if action == "quit" || action == "add" || action == "update" || strings.HasPrefix(action, "remove:") {
+			if action == "quit" || action == "add" || action == "update" || strings.HasPrefix(action, "remove:") || strings.HasPrefix(action, "project-handoff:") {
 				return action, nil
 			}
 			if action == "refresh" {

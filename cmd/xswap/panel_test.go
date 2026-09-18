@@ -133,11 +133,14 @@ func testPanelInputHandoff(t *testing.T, action string) {
 			output.Write(chunk)
 			if !selected && strings.Contains(output.String(), "Update version…") {
 				// Exercise selection and confirmation in the actual raw-terminal event loop.
-				down := 6
-				if action == "add" {
-					down = 3
-				} else if action == "remove" {
-					down = 7
+				down := 0
+				for index, item := range (&Panel{UpdateAvailable: true}).menu() {
+					if (action == "add" && item == "Add account…") ||
+						(action == "update" && item == "Update version…") ||
+						(action == "remove" && item == "Remove account…") {
+						down = index
+						break
+					}
 				}
 				if _, err := io.WriteString(stdin, strings.Repeat("\x1b[B", down)+"\r"); err != nil {
 					t.Fatal(err)

@@ -3,9 +3,11 @@
 package main
 
 import (
+	"bytes"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 )
@@ -52,3 +54,13 @@ func replaceProcess(binary string, args, env []string) error {
 func configureProcess(cmd *exec.Cmd)                   {}
 func configureDaemon(cmd *exec.Cmd)                    {}
 func terminateProcess(cmd *exec.Cmd, force bool) error { return cmd.Process.Kill() }
+func managedProcessAlive(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	output, err := exec.Command("tasklist", "/FI", "PID eq "+strconv.Itoa(pid), "/NH", "/FO", "CSV").Output()
+	return err == nil && bytes.Contains(output, []byte(`"`+strconv.Itoa(pid)+`"`))
+}
+func stopManagedProcess(pid int) error {
+	return exec.Command("taskkill", "/PID", strconv.Itoa(pid), "/T").Run()
+}

@@ -82,7 +82,11 @@ func TestUpdateVisibilityAndVersions(t *testing.T) {
 		t.Fatal("available update hidden")
 	}
 	p.Mode = "home"
-	p.MenuCursor = 6
+	for index, item := range p.menu() {
+		if item == "Update version…" {
+			p.MenuCursor = index
+		}
+	}
 	action, err := p.key(fixture(t), []string{"default"}, "enter")
 	if err != nil || action != "" || p.Mode != "confirm-update" {
 		t.Fatalf("update selection did not request confirmation: %s %s %v", p.Mode, action, err)

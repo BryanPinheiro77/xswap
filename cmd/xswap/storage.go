@@ -19,6 +19,7 @@ type App struct {
 	Root, DefaultHome, Binary, PackageManager string
 	HTTPClient                                *http.Client
 	CommandRunner                             func(context.Context, string, ...string) error
+	SessionIndexer                            func(string, string) error
 }
 type AutoConfig struct {
 	Enabled   bool `json:"enabled"`

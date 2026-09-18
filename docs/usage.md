@@ -20,13 +20,44 @@ profile. Choose the intended account in the browser. If cancelled, run
 `xswap login NAME`; device-code login is available with `--device-auth`.
 
 Profiles retain their assigned names. Creating a new profile does not select it.
-Manual switching affects new Codex processes. Existing processes retain their
-original account. Selection does not alter the Codex desktop application.
+Global manual switching affects new Codex processes. Existing processes retain
+their original account. Selection does not alter the Codex desktop application.
 
-An already-running Codex session keeps its original account and `CODEX_HOME`.
-After switching, close and reopen that session to use the new account. XSwap does
-not change authentication in place; a future supervised restart flow is tracked
-in [issue #27](https://github.com/BryanPinheiro77/xswap/issues/27).
+## Project accounts and conversation handoff
+
+```sh
+xswap project use work
+xswap project current
+xswap project switch account-2
+xswap project clear
+```
+
+`project use` pins new Codex processes in the current repository without copying
+history or restarting anything. XSwap stores the name in `.xswap-account` at the
+repository root, and the nearest parent file wins. Add the file to `.gitignore`
+when each contributor uses different local account names.
+
+Choose **Switch project account…** in the panel, or run `project switch`, for a
+full handoff. Before making changes, XSwap shows the source and destination,
+the number of project conversations to copy, and the number of running sessions
+it can restart. After confirmation it:
+
+1. pins the destination account for the repository;
+2. stops only Codex child processes supervised by the XSwap wrapper in that project;
+3. copies every conversation whose recorded working directory is the repository
+   or one of its descendants; and
+4. resumes each managed conversation in its original terminal and working directory.
+
+Other projects, terminals, and unmanaged processes are unchanged. Conversations
+remain in the source profile and identical repeated transfers are safe. XSwap
+does not copy authentication, config, cache, database, or unrelated sessions.
+Sessions opened before installing a version with supervision cannot be restarted
+automatically; their conversations are still copied and can be opened with
+`codex resume` under the destination project account.
+
+Use `--path DIR` to target another repository and `--yes` for a confirmed
+noninteractive `project switch`. An explicit `CODEX_HOME` still takes priority
+and bypasses project selection and supervision.
 
 Display names are optional labels stored locally in XSwap settings. When set,
 the terminal panel shows the label instead of the account e-mail. Clear one with
@@ -76,7 +107,8 @@ and waits five minutes between switches. Unknown or stale quotas hold selection.
 The view shows status, account eligibility, and recent switches. Press `e` to
 enable or stop the monitor; `+`/`-` change the threshold. The detached monitor
 continues after the view closes. Auto-switch changes **newly launched Codex
-processes**, not a running conversation. Restart Codex to use a changed selection.
+processes**, not a running conversation. Use the confirmed project-switch action
+when a project's managed sessions should move immediately.
 
 A one-shot check runs even while the persistent monitor is off. `--dry-run`
 previews its decision without changing selection; temporary threshold overrides

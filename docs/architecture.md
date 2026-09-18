@@ -17,6 +17,9 @@ in `.github/` and longer guides in `docs/`.
 | `update.go` | GitHub release checks, archive validation, and atomic executable updates |
 | `install_unix.go`, `install_windows.go` | Platform command installation and removal |
 | `process_unix.go`, `process_windows.go` | Platform process and terminal primitives |
+| `project.go` | Project-root discovery and local account selection |
+| `session.go` | Validated project-session discovery, copying, and Codex indexing |
+| `supervisor.go` | Managed Codex lifecycle and confirmed project handoff |
 | `tui.go` | Account menu, watch screen, management, and auto-switch view |
 | `swap_test.go` | Behavioral tests with isolated data and a fake app server |
 
@@ -38,6 +41,27 @@ Windows updates place each release in `%LOCALAPPDATA%\XSwap\app` and atomically
 redirect the owned wrappers. This avoids replacing an executable while Windows
 is still running it. Release archives and executable formats are checked against
 the current operating system and architecture before activation.
+
+## Project handoff
+
+A `.xswap-account` file selects an account for its directory tree. The Codex
+wrapper resolves the nearest file before launch; an explicit `CODEX_HOME` keeps
+precedence. Each wrapper process supervises only the Codex child it started and
+publishes private runtime metadata under the XSwap state directory.
+
+The project-switch action requires confirmation. It writes a handoff request for
+each live managed child in the selected project, stops those child process groups,
+and lets their original wrappers copy and resume the matching conversation in the
+same terminal and working directory. The coordinator then copies the remaining
+project conversations. It never signals an unmanaged process or a session from
+another project.
+
+Transfers parse the rollout's `session_meta`, require a UUID and an absolute
+working directory inside the project, reject symlinks and path traversal, and
+copy one JSONL file atomically. An existing identical destination is reused;
+a conflicting destination stops the handoff. Codex's `migrate-rollouts` command
+indexes each copied conversation. Authentication, configuration, caches, and
+profile databases are never copied.
 
 ## Quota queries
 

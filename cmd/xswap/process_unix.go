@@ -27,3 +27,6 @@ func terminateProcess(cmd *exec.Cmd, force bool) error {
 	}
 	return syscall.Kill(-cmd.Process.Pid, signal)
 }
+
+func managedProcessAlive(pid int) bool { return pid > 0 && syscall.Kill(pid, 0) == nil }
+func stopManagedProcess(pid int) error { return syscall.Kill(-pid, syscall.SIGTERM) }

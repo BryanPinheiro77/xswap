@@ -5,6 +5,20 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ## Unreleased
 
+### Added
+
+- Add project-local account selection through `.xswap-account` and the
+  `xswap project use`, `current`, and `clear` commands.
+- Add a confirmed project account handoff that copies only matching Codex
+  conversations and automatically resumes running XSwap-managed sessions in
+  their original terminals.
+
+### Security
+
+- Validate session metadata and containment, reject source and destination
+  symlinks and conflicts, and never copy credentials, configuration, caches, or
+  unrelated profile data during a project handoff.
+
 ## v0.3.4 — 2026-09-17
 
 ### Fixed

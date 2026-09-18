@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -16,11 +17,25 @@ func main() {
 	var err error
 	if filepath.Base(os.Args[0]) == "codex" {
 		a.ensureDaemon()
-		err = a.launch(a.selected(), os.Args[1:], true)
+		name := a.selected()
+		if os.Getenv("CODEX_HOME") == "" {
+			name, err = a.accountForDirectory(currentDirectory())
+		}
+		if err == nil {
+			err = a.superviseCodex(name, os.Args[1:])
+		}
 	} else {
 		err = a.run(os.Args[1:])
 	}
 	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			code := exitErr.ExitCode()
+			if code < 1 {
+				code = 1
+			}
+			os.Exit(code)
+		}
 		fmt.Fprintln(os.Stderr, "xswap:", err)
 		os.Exit(1)
 	}
@@ -40,6 +55,10 @@ func usage() {
   xswap login NAME               Retry login (--device-auth supported)
   xswap list                    List accounts
   xswap switch NAME             Select an account for new Codex processes
+  xswap project use NAME        Pin an account to the current project
+  xswap project switch NAME     Copy this project's sessions and switch account
+  xswap project clear           Remove the current project's account pin
+  xswap project current         Show the effective account for this directory
   xswap run NAME -- [ARGS]       Run an account without changing selection
   xswap status [NAME]            Check official Codex login status
   xswap limits [NAME] [--all]    Show current quota usage and resets
@@ -85,7 +104,7 @@ func parse(args []string) (Options, error) {
 		switch key {
 		case "device-auth", "all", "yes", "once", "dry-run", "check":
 			o.Flags[key] = true
-		case "threshold", "interval", "repo", "label":
+		case "threshold", "interval", "repo", "label", "path":
 			i++
 			if i >= len(args) {
 				return o, fmt.Errorf("--%s requires a value", key)
@@ -118,7 +137,15 @@ func (a *App) run(args []string) error {
 	action := args[0]
 	if action == "__codex" {
 		a.ensureDaemon()
-		return a.launch(a.selected(), args[1:], true)
+		name := a.selected()
+		if os.Getenv("CODEX_HOME") == "" {
+			var accountErr error
+			name, accountErr = a.accountForDirectory(currentDirectory())
+			if accountErr != nil {
+				return accountErr
+			}
+		}
+		return a.superviseCodex(name, args[1:])
 	}
 	if action == "__daemon" {
 		return a.daemon()
@@ -136,6 +163,9 @@ func (a *App) run(args []string) error {
 			extra = extra[1:]
 		}
 		return a.launch(args[1], extra, false)
+	}
+	if action == "project" {
+		return a.projectCommand(args[1:])
 	}
 	o, err := parse(args[1:])
 	if err != nil {
@@ -295,6 +325,98 @@ func (a *App) run(args []string) error {
 		return a.autoCommand(name, o)
 	default:
 		return fmt.Errorf("unknown command: %s; run xswap --help", action)
+	}
+}
+
+func currentDirectory() string {
+	directory, err := os.Getwd()
+	if err != nil {
+		return "."
+	}
+	return directory
+}
+
+func (a *App) projectCommand(args []string) error {
+	if len(args) == 0 {
+		return errors.New("usage: xswap project use NAME | switch NAME | clear | current")
+	}
+	o, err := parse(args[1:])
+	if err != nil {
+		return err
+	}
+	directory := o.Values["path"]
+	if directory == "" {
+		directory = currentDirectory()
+	}
+	switch args[0] {
+	case "use":
+		if len(o.Names) != 1 {
+			return errors.New("usage: xswap project use NAME [--path DIR]")
+		}
+		root, pinErr := a.pinProject(directory, o.Names[0])
+		if pinErr != nil {
+			return pinErr
+		}
+		fmt.Printf("Project %s will use account %s for new Codex processes.\n", root, o.Names[0])
+		return nil
+	case "switch":
+		if len(o.Names) != 1 {
+			return errors.New("usage: xswap project switch NAME [--path DIR] [--yes]")
+		}
+		plan, planErr := a.planProjectHandoff(directory, o.Names[0])
+		if planErr != nil {
+			return planErr
+		}
+		if !o.Flags["yes"] {
+			if !interactive() {
+				return errors.New("use --yes to confirm a project account switch in scripts")
+			}
+			fmt.Printf("Switch %s from %s to %s, copy %d conversation(s), and restart %d managed session(s)? [y/N] ", plan.Project, plan.Source, plan.Target, len(plan.Sessions), len(plan.Managed))
+			answer, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+			if strings.ToLower(strings.TrimSpace(answer)) != "y" {
+				fmt.Println("Project switch cancelled.")
+				return nil
+			}
+		}
+		result, handoffErr := a.requestProjectHandoff(plan)
+		if handoffErr != nil {
+			return handoffErr
+		}
+		printProjectHandoffResult(result)
+		return nil
+	case "clear":
+		if len(o.Names) != 0 {
+			return errors.New("usage: xswap project clear [--path DIR]")
+		}
+		root, clearErr := clearProject(directory)
+		if clearErr != nil {
+			return clearErr
+		}
+		fmt.Printf("Project account cleared for %s.\n", root)
+		return nil
+	case "current":
+		if len(o.Names) != 0 {
+			return errors.New("usage: xswap project current [--path DIR]")
+		}
+		name, accountErr := a.accountForDirectory(directory)
+		if accountErr != nil {
+			return accountErr
+		}
+		fmt.Println(name)
+		return nil
+	default:
+		return errors.New("usage: xswap project use NAME | switch NAME | clear | current")
+	}
+}
+
+func printProjectHandoffResult(result projectHandoffResult) {
+	fmt.Printf("Project %s now uses account %s.\n", result.Project, result.Target)
+	fmt.Printf("Conversations: %d copied, %d already present.\n", result.Copied, result.Already)
+	if result.Restarted > 0 {
+		fmt.Printf("Managed Codex sessions resumed automatically: %d.\n", result.Restarted)
+	}
+	if result.NotRestarted > 0 {
+		fmt.Printf("Managed sessions that could not be resumed automatically: %d. Use codex resume to reopen them.\n", result.NotRestarted)
 	}
 }
 func (a *App) list() error {
