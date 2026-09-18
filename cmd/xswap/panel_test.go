@@ -23,6 +23,15 @@ func TestPanelActionHelperProcess(t *testing.T) {
 		return
 	}
 	a := fixture(t)
+	a.PanelActionRunner = func(action string, input io.Reader, output io.Writer) panelActionResult {
+		if os.Getenv("XSWAP_TEST_ACTION") == "exec" {
+			_, _ = fmt.Fprint(output, "XSWAP_CHILD_PROMPT")
+			answer, _ := bufio.NewReader(input).ReadString('\n')
+			_, _ = fmt.Fprintln(output, "XSWAP_CHILD_ANSWER:"+strings.TrimSpace(answer))
+			return panelActionResult{Message: "Child action returned to panel."}
+		}
+		return panelActionResult{ExitAction: action}
+	}
 	helperCLI(t, a)
 	if os.Getenv("XSWAP_TEST_ACTION") == "remove" {
 		ready(t, a, "work")
@@ -75,6 +84,10 @@ func TestRemoveSelectionAcceptsOneConfirmationKey(t *testing.T) {
 
 func TestProjectHandoffAcceptsSingleEnterSpaceAndConfirmationKeys(t *testing.T) {
 	testPanelInputHandoff(t, "handoff")
+}
+
+func TestBubbleTeaActionReleasesAndRecapturesTerminal(t *testing.T) {
+	testPanelInputHandoff(t, "exec")
 }
 
 func testPanelInputHandoff(t *testing.T, action string) {
@@ -136,6 +149,8 @@ func testPanelInputHandoff(t *testing.T, action string) {
 	handoffDriven := false
 	confirmed := false
 	answered := false
+	execAnswered := false
+	execQuit := false
 	for {
 		select {
 		case chunk, ok := <-chunks:
@@ -147,7 +162,7 @@ func testPanelInputHandoff(t *testing.T, action string) {
 				// Exercise selection and confirmation in the actual terminal event loop.
 				down := 0
 				for index, item := range (&Panel{UpdateAvailable: true}).menu() {
-					if (action == "add" && item == "Add account…") ||
+					if ((action == "add" || action == "exec") && item == "Add account…") ||
 						(action == "update" && item == "Update version…") ||
 						(action == "remove" && item == "Remove account…") ||
 						(action == "handoff" && item == "Continue sessions with another account…") {
@@ -198,6 +213,18 @@ func testPanelInputHandoff(t *testing.T, action string) {
 				}
 				answered = true
 			}
+			if action == "exec" && !execAnswered && strings.Contains(output.String(), "XSWAP_CHILD_PROMPT") {
+				if _, err := io.WriteString(stdin, "one-child-line\n"); err != nil {
+					t.Fatal(err)
+				}
+				execAnswered = true
+			}
+			if action == "exec" && execAnswered && !execQuit && strings.Contains(output.String(), "Child action returned to panel.") {
+				if _, err := io.WriteString(stdin, "q"); err != nil {
+					t.Fatal(err)
+				}
+				execQuit = true
+			}
 			finished := strings.Contains(output.String(), "XSWAP_PANEL_ACTION:update")
 			if action == "add" {
 				finished = strings.Contains(output.String(), "XSWAP_NEXT_ANSWER:first-input")
@@ -205,8 +232,13 @@ func testPanelInputHandoff(t *testing.T, action string) {
 				finished = strings.Contains(output.String(), "XSWAP_PANEL_ACCOUNTS:default")
 			} else if action == "handoff" {
 				finished = strings.Contains(output.String(), "XSWAP_PANEL_ACTION:project-handoff:") && strings.Contains(output.String(), "dddddddd-dddd-4ddd-8ddd-dddddddddddd")
+			} else if action == "exec" {
+				finished = strings.Contains(output.String(), "XSWAP_PANEL_ACTION:quit") && strings.Contains(output.String(), "XSWAP_CHILD_ANSWER:one-child-line")
 			}
 			if finished {
+				if action == "exec" && strings.Count(output.String(), "\x1b[?1049h") < 2 {
+					t.Fatal("panel did not recapture the alternate screen after the child action")
+				}
 				restoredScreen := strings.Index(output.String(), "\x1b[?1049l")
 				restoredCursor := strings.Index(output.String(), "\x1b[?25h")
 				resultMarker := strings.Index(output.String(), "XSWAP_PANEL_")

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -43,71 +42,14 @@ func (a *App) dashboard(mode, filter string, interval int) error {
 	if !interactive() {
 		return errors.New("the panel needs an interactive terminal; use xswap watch --once or xswap limits")
 	}
-	for {
-		action, err := a.panel(mode, filter, interval)
-		if err != nil {
-			return err
-		}
-		if action == "update" {
-			fmt.Println("Checking for updates…")
-			installed, updateErr := a.updateCommand(Options{Flags: map[string]bool{"yes": true}})
-			if updateErr != nil {
-				fmt.Println("Update failed:", updateErr)
-			}
-			if installed {
-				return replaceProcess(a.Binary, nil, os.Environ())
-			}
-			fmt.Print("\nPress Enter to return to the menu.")
-			bufio.NewReader(os.Stdin).ReadString('\n')
-			mode = "home"
-			continue
-		}
-		if strings.HasPrefix(action, "remove:") {
-			name := strings.TrimPrefix(action, "remove:")
-			fmt.Printf("Removing %s and archiving its local data…\n", name)
-			archive, removeErr := a.remove(name)
-			if removeErr != nil {
-				fmt.Println("Removal failed:", removeErr)
-			} else {
-				fmt.Println("Account removed. Data archived at", archive)
-			}
-			fmt.Print("\nPress Enter to return to the menu.")
-			bufio.NewReader(os.Stdin).ReadString('\n')
-			mode = "home"
-			continue
-		}
-		if strings.HasPrefix(action, "project-handoff:") {
-			project, target, selected, actionErr := parseHandoffAction(action)
-			fmt.Println("Switching the project account and transferring its conversations…")
-			if actionErr != nil {
-				fmt.Println("Project switch failed:", actionErr)
-			} else if plan, planErr := a.planSelectedProjectHandoff(project, target, selected); planErr != nil {
-				fmt.Println("Project switch failed:", planErr)
-			} else if result, handoffErr := a.requestProjectHandoff(plan); handoffErr != nil {
-				fmt.Println("Project switch failed:", handoffErr)
-			} else {
-				printProjectHandoffResult(a, result)
-			}
-			fmt.Print("\nPress Enter to return to the menu.")
-			bufio.NewReader(os.Stdin).ReadString('\n')
-			mode = "home"
-			continue
-		}
-		if action != "add" {
-			return nil
-		}
-		name, err := a.createNumbered()
-		if err != nil {
-			return err
-		}
-		fmt.Printf("Adding %s. Sign in to the account you want to register.\n", name)
-		if err = a.login(name, false); err != nil {
-			fmt.Println("Login incomplete:", err)
-		}
-		fmt.Print("\nPress Enter to return to the menu.")
-		bufio.NewReader(os.Stdin).ReadString('\n')
-		mode = "home"
+	action, err := a.panel(mode, filter, interval)
+	if err != nil {
+		return err
 	}
+	if action == "restart" {
+		return replaceProcess(a.Binary, nil, os.Environ())
+	}
+	return nil
 }
 
 type panelUpdate struct {

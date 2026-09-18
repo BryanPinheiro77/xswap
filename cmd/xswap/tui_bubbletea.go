@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"os/signal"
 	"strings"
 	"syscall"
@@ -15,6 +18,35 @@ type panelTickMsg time.Time
 type panelUpdateCheckMsg bool
 type panelRefreshMsg []panelUpdate
 
+type panelActionResult struct {
+	Message    string
+	ExitAction string
+}
+
+type panelActionDoneMsg struct {
+	Result panelActionResult
+	Error  error
+}
+
+type panelActionCommand struct {
+	input  io.Reader
+	output io.Writer
+	stderr io.Writer
+	run    func(io.Reader, io.Writer) panelActionResult
+	result panelActionResult
+}
+
+func (c *panelActionCommand) SetStdin(input io.Reader)   { c.input = input }
+func (c *panelActionCommand) SetStdout(output io.Writer) { c.output = output }
+func (c *panelActionCommand) SetStderr(stderr io.Writer) { c.stderr = stderr }
+func (c *panelActionCommand) Run() error {
+	if c.input == nil || c.output == nil {
+		return errors.New("panel action has no terminal")
+	}
+	c.result = c.run(c.input, c.output)
+	return nil
+}
+
 type panelModel struct {
 	app             *App
 	panel           Panel
@@ -26,6 +58,7 @@ type panelModel struct {
 	action          string
 	err             error
 	nextUpdateCheck time.Time
+	runAction       func(string, io.Reader, io.Writer) panelActionResult
 }
 
 func newPanelModel(ctx context.Context, app *App, mode, filter string, interval int) (*panelModel, error) {
@@ -38,14 +71,99 @@ func newPanelModel(ctx context.Context, app *App, mode, filter string, interval 
 		names = []string{filter}
 	}
 	return &panelModel{
-		app:      app,
-		panel:    Panel{Mode: mode, Filter: filter, Records: map[string]Record{}, Width: 120, Height: 30, Busy: true},
-		names:    names,
-		settings: settings,
-		filter:   filter,
-		interval: interval,
-		ctx:      ctx,
+		app:       app,
+		panel:     Panel{Mode: mode, Filter: filter, Records: map[string]Record{}, Width: 120, Height: 30, Busy: true},
+		names:     names,
+		settings:  settings,
+		filter:    filter,
+		interval:  interval,
+		ctx:       ctx,
+		runAction: app.runPanelAction,
 	}, nil
+}
+
+func waitForPanelReturn(input io.Reader, output io.Writer) {
+	_, _ = fmt.Fprint(output, "\nPress Enter to return to the menu.")
+	_, _ = bufio.NewReader(input).ReadString('\n')
+}
+
+func (a *App) runPanelAction(action string, input io.Reader, output io.Writer) panelActionResult {
+	result := panelActionResult{}
+	switch {
+	case action == "update":
+		_, _ = fmt.Fprintln(output, "Checking for updates…")
+		installed, err := a.updateCommand(Options{Flags: map[string]bool{"yes": true}})
+		if err != nil {
+			_, _ = fmt.Fprintln(output, "Update failed:", err)
+			result.Message = "Update failed: " + err.Error()
+		} else if installed {
+			result.ExitAction = "restart"
+			return result
+		} else {
+			result.Message = "XSwap is already up to date."
+		}
+	case action == "add":
+		name, err := a.createNumbered()
+		if err != nil {
+			_, _ = fmt.Fprintln(output, "Account creation failed:", err)
+			result.Message = "Account creation failed: " + err.Error()
+			break
+		}
+		_, _ = fmt.Fprintf(output, "Adding %s. Sign in to the account you want to register.\n", name)
+		if err = a.login(name, false); err != nil {
+			_, _ = fmt.Fprintln(output, "Login incomplete:", err)
+			result.Message = "Login incomplete for " + name + ": " + err.Error()
+		} else {
+			result.Message = "Added " + name + "."
+		}
+	case strings.HasPrefix(action, "remove:"):
+		name := strings.TrimPrefix(action, "remove:")
+		_, _ = fmt.Fprintf(output, "Removing %s and archiving its local data…\n", name)
+		archive, err := a.remove(name)
+		if err != nil {
+			_, _ = fmt.Fprintln(output, "Removal failed:", err)
+			result.Message = "Removal failed: " + err.Error()
+		} else {
+			_, _ = fmt.Fprintln(output, "Account removed. Data archived at", archive)
+			result.Message = "Removed " + name + "."
+		}
+	case strings.HasPrefix(action, "project-handoff:"):
+		project, target, selected, err := parseHandoffAction(action)
+		_, _ = fmt.Fprintln(output, "Switching the project account and transferring its conversations…")
+		if err == nil {
+			var plan projectHandoffPlan
+			plan, err = a.planSelectedProjectHandoff(project, target, selected)
+			if err == nil {
+				var handoff projectHandoffResult
+				handoff, err = a.requestProjectHandoff(plan)
+				if err == nil {
+					printProjectHandoffResult(a, handoff)
+					result.Message = fmt.Sprintf("Continued %d session(s) with %s.", handoff.Sessions, a.displayName(handoff.Target))
+				}
+			}
+		}
+		if err != nil {
+			_, _ = fmt.Fprintln(output, "Project switch failed:", err)
+			result.Message = "Project switch failed: " + err.Error()
+		}
+	default:
+		result.Message = "Unknown panel action."
+	}
+	waitForPanelReturn(input, output)
+	return result
+}
+
+func (m *panelModel) actionCommand(action string) tea.Cmd {
+	runner := m.runAction
+	if m.app.PanelActionRunner != nil {
+		runner = m.app.PanelActionRunner
+	}
+	command := &panelActionCommand{run: func(input io.Reader, output io.Writer) panelActionResult {
+		return runner(action, input, output)
+	}}
+	return tea.Exec(command, func(err error) tea.Msg {
+		return panelActionDoneMsg{Result: command.result, Error: err}
+	})
 }
 
 func panelTick() tea.Cmd {
@@ -147,6 +265,27 @@ func (m *panelModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			m.panel.MenuCursor = 0
 		}
 		m.panel.UpdateAvailable = available
+	case panelActionDoneMsg:
+		if msg.Error != nil {
+			m.panel.Message = "Action failed: " + msg.Error.Error()
+		} else {
+			m.panel.Message = msg.Result.Message
+		}
+		if msg.Result.ExitAction != "" {
+			m.action = msg.Result.ExitAction
+			return m, tea.Quit
+		}
+		m.names = m.app.names()
+		if m.filter != "" {
+			m.names = []string{m.filter}
+		}
+		if !m.refreshSettings() {
+			return m, tea.Quit
+		}
+		m.panel.Mode = "home"
+		m.panel.Cursor, m.panel.MenuCursor, m.panel.Offset = 0, 0, 0
+		m.panel.Busy = true
+		return m, tea.Batch(m.refreshCommand(), m.updateCheckCommand())
 	case panelTickMsg:
 		now := time.Time(msg)
 		commands := []tea.Cmd{panelTick()}
@@ -174,9 +313,11 @@ func (m *panelModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				m.panel.Busy = true
 				return m, m.refreshCommand()
 			}
-		case action == "quit", action == "add", action == "update", strings.HasPrefix(action, "remove:"), strings.HasPrefix(action, "project-handoff:"):
+		case action == "quit":
 			m.action = action
 			return m, tea.Quit
+		case action == "add", action == "update", strings.HasPrefix(action, "remove:"), strings.HasPrefix(action, "project-handoff:"):
+			return m, m.actionCommand(action)
 		}
 	}
 	m.clampCursor()
