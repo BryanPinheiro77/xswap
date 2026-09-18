@@ -5,6 +5,8 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ## Unreleased
 
+## v0.4.0 — 2026-09-18
+
 ### Changed
 
 - Rename the project handoff menu action to **Continue sessions with another
@@ -21,6 +23,9 @@ tags; unreleased work stays in this section until a release is prepared.
   process in its directory, allowing picker-based `codex resume` sessions to restart.
 - Safely fast-forward append-only session histories when moving a conversation
   back to an account, while rejecting histories changed in both accounts.
+- Show the source and destination account after a handoff, mark the account
+  effective for the current project as active, and identify a different global
+  default separately.
 
 ### Added
 
@@ -29,6 +34,17 @@ tags; unreleased work stays in this section until a release is prepared.
 - Add a confirmed project account handoff that copies only matching Codex
   conversations and automatically resumes running XSwap-managed sessions in
   their original terminals.
+- Discover project conversations across all registered accounts when the current
+  project pin or global selection differs from the account that owns them.
+
+### Fixed
+
+- Register transferred conversations through Codex's app-server so inactive
+  sessions appear in the destination account's resume picker.
+- Preserve the selected resumed conversation when a supervised process has not
+  yet published its session identifier.
+- Detect open conversations outside XSwap supervision and stop before copying,
+  naming the sessions that must be reopened with `codex resume`.
 
 ### Security
 
