@@ -423,15 +423,19 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 	}
 	if p.Mode == "confirm-project-switch" {
 		selected := p.selectedSessions()
+		scope := muted + "  Other projects and unselected sessions are not changed." + reset
+		if isHomeScope(p.HandoffProject) {
+			scope = "\x1b[33m  Global account: new Codex processes in unpinned directories will use this account." + reset
+		}
 		lines = []string{"", bold + "  Continue sessions from " + clean(a.displayName(p.HandoffSource)) + " with " + clean(a.displayName(p.Pending)) + "?" + reset,
-			muted + "  Project: " + clean(filepath.Base(p.HandoffProject)) + reset,
+			muted + "  Scope: " + clean(filepath.Base(p.HandoffProject)) + reset,
 			muted + fmt.Sprintf("  Selected conversations: %d", len(selected)) + reset}
 		for _, session := range selected {
 			lines = append(lines, "    • "+sessionTitle(session, p.HandoffProject))
 		}
 		lines = append(lines,
 			muted+fmt.Sprintf("  Restart and resume %d currently managed Codex session(s).", p.HandoffManaged)+reset,
-			muted+"  Other projects and unselected sessions are not changed."+reset, "", accent(p.Theme)+"  y Confirm continuation   esc Back"+reset)
+			scope, "", accent(p.Theme)+"  y Confirm continuation   esc Back"+reset)
 	}
 	if p.Mode == "rename-input" {
 		lines = append(lines, "", bold+"  Display name: "+p.Input+"█"+reset, muted+"  Type a name, or leave it empty to use the e-mail. Enter saves; Esc cancels."+reset)

@@ -90,19 +90,24 @@ adding, enable/disable, removal, theme, and quit. Arrow keys navigate; Enter
 selects; Esc goes back.
 
 **Switch account…** changes the global default for new Codex processes and does
-not move conversations. **Continue sessions with another account…** pins the
-current repository and first lists its conversations, with every conversation
+not move conversations. **Continue sessions with another account…** first lists
+the current directory's project conversations, with every conversation
 selected initially. Use `Space` to include or exclude a conversation and `Enter`
 to choose the destination account. The final review shows the selected
 conversations and how many open managed sessions will restart. Other projects,
 unselected conversations, and unmanaged terminal processes are left alone.
 
 Project selection is stored in `.xswap-account` at the repository root; the
-nearest file wins in nested directories. Add it to `.gitignore` when account
-names are local to each contributor. Original conversation files remain in the
-source profile. XSwap copies no authentication, config, cache, or unselected
-session data during a handoff. The CLI command `xswap project switch NAME`
-selects every conversation in the project for non-panel workflows.
+nearest file wins in nested directories. XSwap adds it to the repository's
+local `.git/info/exclude`, preventing accidental commits without changing the
+project's `.gitignore`. Original conversation files remain in the source
+profile. XSwap copies no authentication, config, cache, or unselected session
+data during a handoff. The CLI command `xswap project switch NAME` selects every
+conversation in the project for non-panel workflows.
+
+When run directly from the user home, a handoff remains available for standalone
+conversations and updates the global account for unpinned directories instead of
+creating a broad `~/.xswap-account` file. Filesystem-root handoffs are refused.
 
 ## Auto-switch
 

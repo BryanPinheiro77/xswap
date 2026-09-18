@@ -410,7 +410,11 @@ func (a *App) projectCommand(args []string) error {
 }
 
 func printProjectHandoffResult(result projectHandoffResult) {
-	fmt.Printf("Project %s now uses account %s.\n", result.Project, result.Target)
+	if result.Global {
+		fmt.Printf("Global account for unpinned directories is now %s.\n", result.Target)
+	} else {
+		fmt.Printf("Project %s now uses account %s.\n", result.Project, result.Target)
+	}
 	fmt.Printf("Conversations: %d copied, %d already present.\n", result.Copied, result.Already)
 	if result.Restarted > 0 {
 		fmt.Printf("Managed Codex sessions resumed automatically: %d.\n", result.Restarted)

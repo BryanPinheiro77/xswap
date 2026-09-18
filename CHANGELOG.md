@@ -31,6 +31,12 @@ tags; unreleased work stays in this section until a release is prepared.
 - Validate session metadata and containment, reject source and destination
   symlinks and conflicts, and never copy credentials, configuration, caches, or
   unrelated profile data during a project handoff.
+- Build releases with Go 1.26.6 or newer so shipped binaries include the latest
+  standard-library security fixes.
+- Refuse persistent project pins at the user home and use an explicit global
+  account switch for home-scoped handoffs; filesystem-root handoffs are blocked.
+- Add `.xswap-account` to the repository's local `.git/info/exclude` before
+  writing it, preventing accidental commits without changing project files.
 
 ## v0.3.4 — 2026-09-17
 

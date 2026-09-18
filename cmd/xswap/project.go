@@ -9,6 +9,7 @@ import (
 )
 
 const projectAccountFile = ".xswap-account"
+const projectAccountExclude = "/.xswap-account"
 
 type projectSelection struct {
 	Account string
@@ -38,6 +39,120 @@ func projectRoot(start string) (string, error) {
 			return root, nil
 		}
 	}
+}
+
+func isHomeScope(root string) bool {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+	return filepath.Clean(root) == filepath.Clean(home)
+}
+
+func validateProjectPinScope(root string) error {
+	clean := filepath.Clean(root)
+	if isHomeScope(clean) || filepath.Dir(clean) == clean {
+		return errors.New("project pins cannot be created at the user home or filesystem root")
+	}
+	return nil
+}
+
+func validateHandoffScope(root string) error {
+	clean := filepath.Clean(root)
+	if filepath.Dir(clean) == clean {
+		return errors.New("session handoff cannot use the filesystem root")
+	}
+	return nil
+}
+
+func gitMetadataDirectory(root string) (string, bool, error) {
+	path := filepath.Join(root, ".git")
+	info, err := os.Lstat(path)
+	if os.IsNotExist(err) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	gitDir := path
+	if !info.IsDir() {
+		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() || info.Size() > 4096 {
+			return "", false, errors.New(".git must be a directory or a regular gitdir file")
+		}
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return "", false, readErr
+		}
+		value := strings.TrimSpace(string(data))
+		if !strings.HasPrefix(value, "gitdir:") {
+			return "", false, errors.New(".git file has an invalid gitdir reference")
+		}
+		gitDir = strings.TrimSpace(strings.TrimPrefix(value, "gitdir:"))
+		if !filepath.IsAbs(gitDir) {
+			gitDir = filepath.Join(root, gitDir)
+		}
+	}
+	gitDir, err = filepath.Abs(gitDir)
+	if err != nil {
+		return "", false, err
+	}
+	if info, err = os.Stat(gitDir); err != nil || !info.IsDir() {
+		return "", false, errors.New("git metadata directory is unavailable")
+	}
+	commonPath := filepath.Join(gitDir, "commondir")
+	if commonInfo, commonErr := os.Lstat(commonPath); commonErr == nil {
+		if commonInfo.Mode()&os.ModeSymlink != 0 || !commonInfo.Mode().IsRegular() || commonInfo.Size() > 4096 {
+			return "", false, errors.New("git commondir reference is invalid")
+		}
+		data, readErr := os.ReadFile(commonPath)
+		if readErr != nil {
+			return "", false, readErr
+		}
+		common := strings.TrimSpace(string(data))
+		if !filepath.IsAbs(common) {
+			common = filepath.Join(gitDir, common)
+		}
+		gitDir, err = filepath.Abs(common)
+		if err != nil {
+			return "", false, err
+		}
+	} else if !os.IsNotExist(commonErr) {
+		return "", false, commonErr
+	}
+	if info, err = os.Stat(gitDir); err != nil || !info.IsDir() {
+		return "", false, errors.New("git common metadata directory is unavailable")
+	}
+	return gitDir, true, nil
+}
+
+func ensureProjectAccountExcluded(root string) error {
+	gitDir, found, err := gitMetadataDirectory(root)
+	if err != nil || !found {
+		return err
+	}
+	path := filepath.Join(gitDir, "info", "exclude")
+	data := []byte{}
+	if info, statErr := os.Lstat(path); statErr == nil {
+		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() || info.Size() > 1<<20 {
+			return errors.New("git info/exclude must be a small regular file")
+		}
+		data, err = os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+	} else if !os.IsNotExist(statErr) {
+		return statErr
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.TrimSpace(line) == projectAccountExclude {
+			return nil
+		}
+	}
+	if len(data) > 0 && data[len(data)-1] != '\n' {
+		data = append(data, '\n')
+	}
+	data = append(data, []byte("# XSwap local account selection\n"+projectAccountExclude+"\n")...)
+	return atomicWrite(path, data)
 }
 
 func (a *App) projectSelection(start string) (projectSelection, bool, error) {
@@ -114,6 +229,12 @@ func (a *App) pinProject(directory, name string) (string, error) {
 	root, err := projectRoot(directory)
 	if err != nil {
 		return "", err
+	}
+	if err = validateProjectPinScope(root); err != nil {
+		return "", err
+	}
+	if err = ensureProjectAccountExcluded(root); err != nil {
+		return "", fmt.Errorf("protect project account from Git tracking: %w", err)
 	}
 	path := filepath.Join(root, projectAccountFile)
 	if info, statErr := os.Lstat(path); statErr == nil && (info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular()) {

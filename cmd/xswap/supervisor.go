@@ -45,6 +45,7 @@ type projectHandoffResult struct {
 	Already      int
 	Restarted    int
 	NotRestarted int
+	Global       bool
 }
 
 func (a *App) managedPath(pid int) string {
@@ -242,6 +243,9 @@ func (a *App) projectHandoffSource(directory string) (projectHandoffPlan, error)
 	if err != nil {
 		return projectHandoffPlan{}, err
 	}
+	if err = validateHandoffScope(project); err != nil {
+		return projectHandoffPlan{}, err
+	}
 	source, err := a.accountForDirectory(directory)
 	if err != nil {
 		return projectHandoffPlan{}, err
@@ -348,7 +352,27 @@ func (a *App) requestProjectHandoff(plan projectHandoffPlan) (projectHandoffResu
 		return projectHandoffResult{}, errors.New("project account changed after confirmation; review the switch again")
 	}
 	plan = current
-	result := projectHandoffResult{Project: plan.Project, Source: plan.Source, Target: plan.Target, Sessions: len(plan.Sessions)}
+	result := projectHandoffResult{Project: plan.Project, Source: plan.Source, Target: plan.Target, Sessions: len(plan.Sessions), Global: isHomeScope(plan.Project)}
+	selectedAccounts, err := a.managedForProject(plan.Project)
+	if err != nil {
+		return result, err
+	}
+	for _, record := range selectedAccounts {
+		if record.Account == plan.Target {
+			return result, fmt.Errorf("destination account %q already has a managed Codex process in this project", plan.Target)
+		}
+	}
+	// Prepare and index every selected conversation before changing the project
+	// account or stopping a terminal. Active source rollouts can append after
+	// this snapshot; their supervisors safely fast-forward them once stopped.
+	changed := map[string]bool{}
+	for _, session := range plan.Sessions {
+		_, copied, copyErr := a.copySession(plan.Source, plan.Target, session)
+		if copyErr != nil {
+			return result, copyErr
+		}
+		changed[session.ID] = copied
+	}
 	written := []string{}
 	for _, record := range plan.Managed {
 		request := handoffRequest{Target: plan.Target, Project: plan.Project}
@@ -361,7 +385,11 @@ func (a *App) requestProjectHandoff(plan projectHandoffPlan) (projectHandoffResu
 		}
 		written = append(written, path)
 	}
-	_, err = a.pinProject(plan.Project, plan.Target)
+	if result.Global {
+		err = a.selectAccount(plan.Target)
+	} else {
+		_, err = a.pinProject(plan.Project, plan.Target)
+	}
 	if err != nil {
 		for _, pending := range written {
 			_ = os.Remove(pending)
@@ -425,6 +453,11 @@ func (a *App) requestProjectHandoff(plan projectHandoffPlan) (projectHandoffResu
 			return result, copyErr
 		}
 		if copied {
+			changed[session.ID] = true
+		}
+	}
+	for _, session := range plan.Sessions {
+		if changed[session.ID] {
 			result.Copied++
 		} else {
 			result.Already++

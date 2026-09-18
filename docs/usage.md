@@ -34,8 +34,12 @@ xswap project clear
 
 `project use` pins new Codex processes in the current repository without copying
 history or restarting anything. XSwap stores the name in `.xswap-account` at the
-repository root, and the nearest parent file wins. Add the file to `.gitignore`
-when each contributor uses different local account names.
+repository root, and the nearest parent file wins. Before writing the file,
+XSwap adds `/.xswap-account` to the repository's local `.git/info/exclude` so it
+cannot be committed accidentally and the shared `.gitignore` remains unchanged.
+Project pins are refused at the user home and filesystem root. A handoff started
+from the user home still supports standalone conversations: it changes the
+global account for unpinned directories without creating `~/.xswap-account`.
 
 Choose **Continue sessions with another account…** in the panel, or run
 `project switch`, for a handoff. The panel follows this sequence:
@@ -48,14 +52,18 @@ Choose **Continue sessions with another account…** in the panel, or run
 
 After confirmation XSwap:
 
-1. pins the destination account for the repository;
-2. stops only selected Codex child processes supervised by the XSwap wrapper;
-3. copies the selected conversations; and
-4. resumes each selected managed conversation in its original terminal and
-   working directory.
+1. validates, copies, and indexes a safe snapshot of every selected conversation;
+2. pins the destination account for the project, or updates the global account
+   for a home-scoped handoff;
+3. stops only selected Codex child processes supervised by the XSwap wrapper;
+   and
+4. fast-forwards and resumes each selected managed conversation in its original
+   terminal and working directory.
 
 Other projects, terminals, and unmanaged processes are unchanged. Conversations
-remain in the source profile and identical repeated transfers are safe. XSwap
+remain in the source profile and append-only transfers can safely return to an
+earlier account. If both copies changed independently, XSwap reports a divergence
+instead of overwriting either history. XSwap
 does not copy authentication, config, cache, database, or unrelated sessions.
 Sessions opened before installing a version with supervision cannot be restarted
 automatically; their conversations are still copied and can be opened with

@@ -76,6 +76,62 @@ func TestProjectHandoffCopiesAllProjectSessionsAndPinsTarget(t *testing.T) {
 	}
 }
 
+func TestProjectHandoffRejectsDivergenceBeforeChangingProjectAccount(t *testing.T) {
+	a := fixture(t)
+	ready(t, a, "work")
+	a.SessionIndexer = func(string, string) error { return nil }
+	project := t.TempDir()
+	id := "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+	sourcePath := writeTestSession(t, a.DefaultHome, "2026/09/18", id, project, "start")
+	session, err := readSession(sourcePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	destination, _, err := a.copySession("default", "work", session)
+	if err != nil {
+		t.Fatal(err)
+	}
+	appendSessionEvent(t, sourcePath, "continued in default")
+	appendSessionEvent(t, destination, "continued in work")
+	plan, err := a.planProjectHandoff(project, "work")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = a.requestProjectHandoff(plan); err == nil || !strings.Contains(err.Error(), "diverged") {
+		t.Fatal("handoff accepted divergent histories", err)
+	}
+	if selected, selectionErr := a.accountForDirectory(project); selectionErr != nil || selected != "default" {
+		t.Fatal("failed handoff changed project account", selected, selectionErr)
+	}
+	if exists(filepath.Join(project, projectAccountFile)) {
+		t.Fatal("failed handoff created a project account pin")
+	}
+}
+
+func TestHomeSessionHandoffUsesGlobalSelectionWithoutProjectPin(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	a := fixture(t)
+	ready(t, a, "work")
+	a.SessionIndexer = func(string, string) error { return nil }
+	writeTestSession(t, a.DefaultHome, "2026/09/18", "ffffffff-ffff-4fff-8fff-ffffffffffff", home, "standalone conversation")
+	plan, err := a.planProjectHandoff(home, "work")
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := a.requestProjectHandoff(plan)
+	if err != nil || !result.Global || result.Copied != 1 {
+		t.Fatal(result, err)
+	}
+	if a.selected() != "work" {
+		t.Fatal("home handoff did not update the global account")
+	}
+	if exists(filepath.Join(home, projectAccountFile)) {
+		t.Fatal("home handoff created a broad project pin")
+	}
+}
+
 func TestProjectSwitchPanelExplainsConsequencesBeforeAction(t *testing.T) {
 	a := fixture(t)
 	ready(t, a, "work")
