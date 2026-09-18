@@ -165,14 +165,14 @@ func (a *App) superviseCodex(initialAccount string, initialArgs []string) error 
 		cmd := processCommand(cli, commandArgs...)
 		setProcessEnvironment(cmd, env)
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-		configureProcess(cmd)
+		configureManagedProcess(cmd)
 		started := time.Now()
 		if commandErr = cmd.Start(); commandErr != nil {
 			return commandErr
 		}
 		record := managedCodex{SupervisorPID: supervisorPID, ChildPID: cmd.Process.Pid, Account: account, Project: project, CWD: cwd, SessionID: knownID, Started: started.Unix()}
 		if commandErr = a.writeManaged(record); commandErr != nil {
-			_ = terminateProcess(cmd, true)
+			_ = terminateManagedProcess(cmd, true)
 			_ = cmd.Wait()
 			return commandErr
 		}

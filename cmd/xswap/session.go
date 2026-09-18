@@ -74,10 +74,24 @@ func previewFromEnvelope(line []byte) string {
 
 func userSessionPreview(message string) string {
 	message = strings.TrimSpace(message)
-	// Codex records runtime metadata as a user message before the first real
-	// prompt. It identifies the execution environment, not the conversation.
-	if strings.HasPrefix(message, "<environment_context>") {
-		return ""
+	// Codex can record runtime metadata and injected repository instructions as
+	// user messages before the first real prompt. They describe the execution
+	// environment, not the conversation.
+	technicalPrefixes := []string{
+		"<environment_context>",
+		"<permissions instructions>",
+		"<skills_instructions>",
+		"<collaboration_mode>",
+		"<apps_instructions>",
+		"<plugins_instructions>",
+		"<turn_aborted>",
+		"# AGENTS.md instructions for ",
+		"The following is the Codex agent history whose request action",
+	}
+	for _, prefix := range technicalPrefixes {
+		if strings.HasPrefix(message, prefix) {
+			return ""
+		}
 	}
 	return message
 }

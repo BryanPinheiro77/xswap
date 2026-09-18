@@ -20,6 +20,11 @@ func replaceProcess(binary string, args, env []string) error {
 
 func configureProcess(cmd *exec.Cmd) { cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true} }
 func configureDaemon(cmd *exec.Cmd)  { cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true} }
+
+// An interactive Codex child must stay in the terminal's foreground process
+// group. Moving it to a new group makes shells with job control suspend it on
+// the first terminal read.
+func configureManagedProcess(*exec.Cmd) {}
 func terminateProcess(cmd *exec.Cmd, force bool) error {
 	signal := syscall.SIGTERM
 	if force {
@@ -28,5 +33,13 @@ func terminateProcess(cmd *exec.Cmd, force bool) error {
 	return syscall.Kill(-cmd.Process.Pid, signal)
 }
 
+func terminateManagedProcess(cmd *exec.Cmd, force bool) error {
+	signal := syscall.SIGTERM
+	if force {
+		signal = syscall.SIGKILL
+	}
+	return syscall.Kill(cmd.Process.Pid, signal)
+}
+
 func managedProcessAlive(pid int) bool { return pid > 0 && syscall.Kill(pid, 0) == nil }
-func stopManagedProcess(pid int) error { return syscall.Kill(-pid, syscall.SIGTERM) }
+func stopManagedProcess(pid int) error { return syscall.Kill(pid, syscall.SIGTERM) }

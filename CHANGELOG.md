@@ -13,6 +13,8 @@ tags; unreleased work stays in this section until a release is prepared.
   selected initially and `Space` controls for selective continuation.
 - Label conversations with their first real user request, skipping Codex
   environment metadata and falling back to the project folder and update time.
+- Keep supervised Codex processes attached to the foreground terminal so
+  interactive startup is not suspended by Unix job control.
 
 ### Added
 

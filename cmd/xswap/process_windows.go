@@ -53,7 +53,11 @@ func replaceProcess(binary string, args, env []string) error {
 
 func configureProcess(cmd *exec.Cmd)                   {}
 func configureDaemon(cmd *exec.Cmd)                    {}
+func configureManagedProcess(cmd *exec.Cmd)            {}
 func terminateProcess(cmd *exec.Cmd, force bool) error { return cmd.Process.Kill() }
+func terminateManagedProcess(cmd *exec.Cmd, force bool) error {
+	return cmd.Process.Kill()
+}
 func managedProcessAlive(pid int) bool {
 	if pid <= 0 {
 		return false
