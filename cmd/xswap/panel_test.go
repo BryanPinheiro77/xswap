@@ -27,6 +27,12 @@ func TestPanelActionHelperProcess(t *testing.T) {
 	if os.Getenv("XSWAP_TEST_ACTION") == "remove" {
 		ready(t, a, "work")
 	}
+	if os.Getenv("XSWAP_TEST_ACTION") == "handoff" {
+		ready(t, a, "work")
+		project := t.TempDir()
+		t.Chdir(project)
+		writeTestSession(t, a.DefaultHome, "2026/09/18", "dddddddd-dddd-4ddd-8ddd-dddddddddddd", project, "transfer this conversation")
+	}
 	if err := writeJSON(a.Root+"/update.json", map[string]string{"Repository": "owner/xswap"}); err != nil {
 		t.Fatal(err)
 	}
@@ -65,6 +71,10 @@ func TestAddSelectionHandsInputToNextPrompt(t *testing.T) {
 
 func TestRemoveSelectionAcceptsOneConfirmationKey(t *testing.T) {
 	testPanelInputHandoff(t, "remove")
+}
+
+func TestProjectHandoffAcceptsSingleEnterSpaceAndConfirmationKeys(t *testing.T) {
+	testPanelInputHandoff(t, "handoff")
 }
 
 func testPanelInputHandoff(t *testing.T, action string) {
@@ -122,6 +132,9 @@ func testPanelInputHandoff(t *testing.T, action string) {
 	var output bytes.Buffer
 	selected := false
 	accountSelected := false
+	sessionUnselected := false
+	sessionReselected := false
+	sessionsConfirmed := false
 	confirmed := false
 	answered := false
 	for {
@@ -133,16 +146,50 @@ func testPanelInputHandoff(t *testing.T, action string) {
 			output.Write(chunk)
 			if !selected && strings.Contains(output.String(), "Update version…") {
 				// Exercise selection and confirmation in the actual raw-terminal event loop.
-				down := 6
-				if action == "add" {
-					down = 3
-				} else if action == "remove" {
-					down = 7
+				down := 0
+				for index, item := range (&Panel{UpdateAvailable: true}).menu() {
+					if (action == "add" && item == "Add account…") ||
+						(action == "update" && item == "Update version…") ||
+						(action == "remove" && item == "Remove account…") ||
+						(action == "handoff" && item == "Continue sessions with another account…") {
+						down = index
+						break
+					}
 				}
 				if _, err := io.WriteString(stdin, strings.Repeat("\x1b[B", down)+"\r"); err != nil {
 					t.Fatal(err)
 				}
 				selected = true
+			}
+			if action == "handoff" && selected && !sessionUnselected && strings.Contains(output.String(), "1 of 1 selected") {
+				if _, err := io.WriteString(stdin, " "); err != nil {
+					t.Fatal(err)
+				}
+				sessionUnselected = true
+			}
+			if action == "handoff" && sessionUnselected && !sessionReselected && strings.Contains(output.String(), "0 of 1 selected") {
+				if _, err := io.WriteString(stdin, " "); err != nil {
+					t.Fatal(err)
+				}
+				sessionReselected = true
+			}
+			if action == "handoff" && sessionReselected && !sessionsConfirmed && strings.Count(output.String(), "1 of 1 selected") >= 2 {
+				if _, err := io.WriteString(stdin, "\r"); err != nil {
+					t.Fatal(err)
+				}
+				sessionsConfirmed = true
+			}
+			if action == "handoff" && sessionsConfirmed && !accountSelected && strings.Contains(output.String(), "select destination account") {
+				if _, err := io.WriteString(stdin, "\r"); err != nil {
+					t.Fatal(err)
+				}
+				accountSelected = true
+			}
+			if action == "handoff" && accountSelected && !confirmed && strings.Contains(output.String(), "review session continuation") {
+				if _, err := io.WriteString(stdin, "\r"); err != nil {
+					t.Fatal(err)
+				}
+				confirmed = true
 			}
 			if action == "remove" && selected && !accountSelected && strings.Contains(output.String(), "remove account") {
 				if _, err := io.WriteString(stdin, "\x1b[B\r"); err != nil {
@@ -175,6 +222,8 @@ func testPanelInputHandoff(t *testing.T, action string) {
 				finished = strings.Contains(output.String(), "XSWAP_NEXT_ANSWER:first-input")
 			} else if action == "remove" {
 				finished = strings.Contains(output.String(), "XSWAP_PANEL_ACCOUNTS:default")
+			} else if action == "handoff" {
+				finished = strings.Contains(output.String(), "XSWAP_PANEL_ACTION:project-handoff:") && strings.Contains(output.String(), "dddddddd-dddd-4ddd-8ddd-dddddddddddd")
 			}
 			if finished {
 				if !strings.Contains(output.String(), "\x1b[?25h\x1b[?1049l") {

@@ -17,6 +17,9 @@ in `.github/` and longer guides in `docs/`.
 | `update.go` | GitHub release checks, archive validation, and atomic executable updates |
 | `install_unix.go`, `install_windows.go` | Platform command installation and removal |
 | `process_unix.go`, `process_windows.go` | Platform process and terminal primitives |
+| `project.go` | Project-root discovery and local account selection |
+| `session.go` | Validated project-session discovery, copying, and Codex indexing |
+| `supervisor.go` | Managed Codex lifecycle and confirmed project handoff |
 | `tui.go` | Account menu, watch screen, management, and auto-switch view |
 | `swap_test.go` | Behavioral tests with isolated data and a fake app server |
 
@@ -38,6 +41,51 @@ Windows updates place each release in `%LOCALAPPDATA%\XSwap\app` and atomically
 redirect the owned wrappers. This avoids replacing an executable while Windows
 is still running it. Release archives and executable formats are checked against
 the current operating system and architecture before activation.
+
+## Project handoff
+
+A `.xswap-account` file selects an account for its directory tree. The Codex
+wrapper resolves the nearest file before launch; an explicit `CODEX_HOME` keeps
+precedence. Each wrapper process supervises only the Codex child it started and
+publishes private runtime metadata under the XSwap state directory.
+
+The session-continuation action requires confirmation. It first validates and
+copies a safe snapshot of every selected conversation, then writes a handoff
+request for each live managed child in the selected project. It signals only the
+Codex child process, which stays in the terminal's foreground process group, and
+lets the original wrapper fast-forward and resume the matching conversation in
+the same terminal and working directory. The coordinator performs a final sync.
+Before confirmation, XSwap probes Codex's per-thread writer locks. A held lock
+without a matching live XSwap supervisor identifies an open unmanaged
+conversation; the handoff is blocked and the panel names it so the user can
+close it and reopen it through `codex resume`. This prevents the source and
+destination histories from accepting new messages independently.
+
+The panel derives its home-screen project picker only from working directories
+stored in Codex session metadata across registered profiles. It resolves Git
+roots, ignores missing directories, deduplicates copied conversation IDs, and
+orders projects by recent session activity. Opening the panel inside a project
+skips this discovery step and opens that project's conversations directly.
+Conversation IDs copied between profiles are deduplicated; the longest compatible
+history is used, active managed copies take precedence when safe, and divergent
+copies stop the handoff. A single confirmation can therefore consolidate
+selected conversations from multiple source accounts into one destination.
+
+Repository and directory scopes use `.xswap-account`. Git repositories receive
+a local `/.xswap-account` rule in `.git/info/exclude` before the pin is written;
+linked worktrees resolve their common Git metadata directory. A handoff rooted
+at the user home changes the global account for unpinned directories without
+creating a home-wide project file. Filesystem-root handoffs are rejected.
+
+Transfers parse the rollout's `session_meta`, require a UUID and an absolute
+working directory inside the project, reject symlinks and path traversal, and
+copy one JSONL file atomically. Rollouts are treated as append-only: an older
+identical prefix is safely advanced in either account, while histories that
+changed independently are rejected as divergent. Managed sessions register
+themselves when the wrapper resumes them. XSwap registers copied inactive
+sessions through Codex's `thread/resume` app-server request so they appear in
+the destination picker. Authentication, configuration, caches, and profile
+databases are never copied.
 
 ## Quota queries
 

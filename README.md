@@ -11,6 +11,7 @@ used by newly launched Codex processes.
 - English account menu with thin quota bars and reset timing.
 - Browser or device-code login in a separate home for each account.
 - Manual selection and parallel runs without copying tokens between accounts.
+- Project-local account selection and confirmed conversation handoff between accounts.
 - Live quota watching through the official Codex app server.
 - Opt-in background auto-switch with fresh-quota checks and a cooldown.
 - Enable/disable controls and account removal with local archival.
@@ -54,9 +55,10 @@ go build -trimpath -o xswap.exe ./cmd/xswap
 ```
 
 The installer creates the `xswap`, `codex-swap`, and `codex` commands using
-platform-specific links or wrappers. The `codex` command calls your original CLI
-with the selected home; it does not modify the Codex package. Your existing login
-stays available as `default`.
+platform-specific links or wrappers. The `codex` wrapper supervises each newly
+launched terminal session and calls your original CLI with the selected home; it
+does not modify the Codex package. Your existing login stays available as
+`default`. Opening the `xswap` panel before `codex` is not required.
 
 [GitHub Releases](https://github.com/BryanPinheiro77/xswap/releases) provide
 macOS, Linux, and Windows archives for arm64/amd64. On macOS/Linux, extract the
@@ -75,19 +77,55 @@ xswap rename work --label Personal
 xswap switch work
 codex
 
+xswap project use work         # Pin new Codex processes in this repository
+xswap project switch work      # Copy project conversations and resume managed sessions
+
 xswap watch                   # Watch every account
 xswap limits --all            # One-time quota query
 xswap run default -- --version
 ```
 
 No prior login or logout is needed: `add` logs in directly inside a new profile.
-The menu offers switching, watching, auto-switch status, adding, enable/disable,
-removal, theme, and quit. Arrow keys navigate; Enter selects; Esc goes back.
+The menu offers global and project switching, watching, auto-switch status,
+adding, enable/disable, removal, theme, and quit. Arrow keys navigate; Enter
+selects; Esc goes back.
 
-Switching accounts changes the account used by new Codex processes. Existing
-Codex sessions keep the account they started with, so close and reopen a session
-after switching accounts. A future `Restart with another account` flow is tracked
-in [issue #27](https://github.com/BryanPinheiro77/xswap/issues/27).
+**Switch account…** changes the global default for new Codex processes and does
+not move conversations. Inside a project, **Continue sessions with another
+account…** immediately lists that project's conversations. From the user home,
+it first lists only existing projects found in Codex session metadata; XSwap does
+not scan every directory on the computer. Each row counts unique conversations
+across every registered account. After choosing a project, the session picker
+shows that complete deduplicated list and identifies each conversation's source
+account. Every conversation is selected initially. Use `Space` to toggle one conversation, `a`
+to select or clear all, and `Enter` to choose the destination account. The final review shows
+the selected conversations and how many open managed sessions will restart. An
+open conversation that was started outside the XSwap wrapper is identified by
+its Codex writer lock. XSwap stops the handoff, names every affected conversation,
+and asks you to close it and reopen it with `codex resume` before trying again.
+Closed conversations do not need this step. Other projects and unselected
+conversations are left alone.
+
+Project selection is stored in `.xswap-account` at the repository root; the
+nearest file wins in nested directories. XSwap adds it to the repository's
+local `.git/info/exclude`, preventing accidental commits without changing the
+project's `.gitignore`. Original conversation files remain in the source
+profile. Selected conversations may come from multiple source accounts and are
+copied into the chosen destination together. XSwap copies no authentication,
+config, cache, or unselected session data during a handoff. The CLI command
+`xswap project switch NAME` selects every conversation in the project for
+non-panel workflows.
+
+A confirmed project handoff also makes the destination the account used by
+future `codex` processes in that project. A handoff from the user home updates
+the global account for future processes in unpinned directories. **Switch
+account…** changes only that global default: already running Codex sessions keep
+their current account and are not moved.
+
+When run directly from the user home, the project picker also includes a Home
+entry when standalone conversations exist there. Choosing Home updates the global
+account for unpinned directories instead of creating a broad
+`~/.xswap-account` file. Filesystem-root handoffs are refused.
 
 ## Auto-switch
 
@@ -104,8 +142,9 @@ eligible account with the most remaining main Codex quota. It requires five
 percentage points of improvement and a five-minute cooldown. Disabled accounts,
 stale or missing quotas, expired windows, and failed reads cannot become targets.
 
-**Automatic and manual switching affect newly started Codex processes. Running
-conversations remain on their original account.** The monitor continues after
+**Automatic and global manual switching affect newly started Codex processes.**
+Use the separate confirmed project-switch action when running managed sessions
+must be transferred and resumed. The monitor continues after
 the panel closes. After reboot, opening `xswap` or `codex` restarts it if enabled.
 
 ## Account controls

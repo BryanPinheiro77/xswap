@@ -5,6 +5,64 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ## Unreleased
 
+## v0.4.0 — 2026-09-18
+
+### Changed
+
+- Rename the project handoff menu action to **Continue sessions with another
+  account…** so its effect is clear before selecting a destination account.
+- Add a session picker before account selection, with every project conversation
+  selected initially and `Space` controls for selective continuation.
+- Label conversations with their first real user request, skipping Codex
+  environment metadata and falling back to the project folder and update time.
+- Keep supervised Codex processes attached to the foreground terminal so
+  interactive startup is not suspended by Unix job control.
+- Let `a` select or clear every conversation in the handoff picker and accept
+  either `Enter` or `y` on the final review with mode-specific footer guidance.
+- Associate one selected conversation with the only unidentified managed Codex
+  process in its directory, allowing picker-based `codex resume` sessions to restart.
+- Safely fast-forward append-only session histories when moving a conversation
+  back to an account, while rejecting histories changed in both accounts.
+- Show the source and destination account after a handoff, mark the account
+  effective for the current project as active, and identify a different global
+  default separately.
+- Open the current project's conversations directly, while offering a
+  session-derived project picker when XSwap is opened from the user home.
+
+### Added
+
+- Add project-local account selection through `.xswap-account` and the
+  `xswap project use`, `current`, and `clear` commands.
+- Add a confirmed project account handoff that copies only matching Codex
+  conversations and automatically resumes running XSwap-managed sessions in
+  their original terminals.
+- Discover project conversations across all registered accounts when the current
+  project pin or global selection differs from the account that owns them.
+
+### Fixed
+
+- Register transferred conversations through Codex's app-server so inactive
+  sessions appear in the destination account's resume picker.
+- Preserve the selected resumed conversation when a supervised process has not
+  yet published its session identifier.
+- Detect open conversations outside XSwap supervision and stop before copying,
+  naming the sessions that must be reopened with `codex resume`.
+- Show every unique project conversation across registered accounts, identify
+  its source in the picker, and support one handoff from multiple sources into a
+  selected destination.
+
+### Security
+
+- Validate session metadata and containment, reject source and destination
+  symlinks and conflicts, and never copy credentials, configuration, caches, or
+  unrelated profile data during a project handoff.
+- Build releases with Go 1.26.6 or newer so shipped binaries include the latest
+  standard-library security fixes.
+- Refuse persistent project pins at the user home and use an explicit global
+  account switch for home-scoped handoffs; filesystem-root handoffs are blocked.
+- Add `.xswap-account` to the repository's local `.git/info/exclude` before
+  writing it, preventing accidental commits without changing project files.
+
 ## v0.3.4 — 2026-09-17
 
 ### Fixed
