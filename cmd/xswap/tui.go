@@ -70,6 +70,20 @@ func (a *App) dashboard(mode, filter string, interval int) error {
 			mode = "home"
 			continue
 		}
+		if strings.HasPrefix(action, "remove:") {
+			name := strings.TrimPrefix(action, "remove:")
+			fmt.Printf("Removing %s and archiving its local data…\n", name)
+			archive, removeErr := a.remove(name)
+			if removeErr != nil {
+				fmt.Println("Removal failed:", removeErr)
+			} else {
+				fmt.Println("Account removed. Data archived at", archive)
+			}
+			fmt.Print("\nPress Enter to return to the menu.")
+			bufio.NewReader(os.Stdin).ReadString('\n')
+			mode = "home"
+			continue
+		}
 		if action != "add" {
 			return nil
 		}
@@ -386,23 +400,13 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 		return "", nil
 	}
 	if p.Mode == "confirm" {
-		if key == "y" {
-			archive, err := a.remove(p.Pending)
-			if err != nil {
-				p.Message = err.Error()
-			} else {
-				delete(p.Records, p.Pending)
-				p.Message = "Account removed. Data archived at " + archive
-			}
-			p.Pending = ""
-			p.Mode = "home"
-			p.Cursor = 0
-			p.Offset = 0
+		if key == "y" || key == "Y" {
+			return "remove:" + p.Pending, nil
 		}
 		return "", nil
 	}
 	if p.Mode == "confirm-update" {
-		if key == "y" {
+		if key == "y" || key == "Y" {
 			return "update", nil
 		}
 		return "", nil
@@ -767,7 +771,7 @@ func (a *App) panel(mode, filter string, interval int) (string, error) {
 		}
 		p.Cursor = min(p.Cursor, len(names)-1)
 		for _, key := range keys {
-			if p.Mode == "confirm" && key == "y" {
+			if p.Mode == "confirm" && (key == "y" || key == "Y") {
 				fetchCancel()
 				select {
 				case <-workerDone:
@@ -779,7 +783,7 @@ func (a *App) panel(mode, filter string, interval int) (string, error) {
 			if err != nil {
 				p.Message = err.Error()
 			}
-			if action == "quit" || action == "add" || action == "update" {
+			if action == "quit" || action == "add" || action == "update" || strings.HasPrefix(action, "remove:") {
 				return action, nil
 			}
 			if action == "refresh" {
