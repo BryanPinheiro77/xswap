@@ -500,7 +500,7 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 		rows[0] = "Resize the terminal to at least 50×20. Press q to quit."
 		return renderRows(rows, p.Width)
 	}
-	heading := map[string]string{"home": "xswap", "watch": "watching all accounts", "auto": "auto-switch view", "switch": "select account", "project-select": "select project", "session-select": "select sessions to continue", "unmanaged-warning": "restart open sessions", "project-switch": "select destination account", "rename": "select account to rename", "rename-input": "rename account", "disable": "disable / enable account", "remove": "remove account", "confirm": "confirm removal", "confirm-update": "confirm update", "confirm-project-switch": "review session continuation"}[p.Mode]
+	heading := map[string]string{"home": "xswap", "watch": "watching all accounts", "auto": "auto-switch view", "switch": "select account", "project-select": "select project", "session-select": "select sessions to continue", "project-switch": "select destination account", "rename": "select account to rename", "rename-input": "rename account", "disable": "disable / enable account", "remove": "remove account", "confirm": "confirm removal", "confirm-update": "confirm update", "confirm-project-switch": "review session continuation"}[p.Mode]
 	if p.Mode == "home" {
 		heading += " " + clean(version)
 	}
@@ -572,15 +572,13 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 		lines = append(lines,
 			muted+fmt.Sprintf("  Restart and resume %d currently managed Codex session(s).", p.HandoffManaged)+reset,
 			scope, "", accent(p.Theme)+"  enter / y Confirm continuation   esc Back"+reset)
-	}
-	if p.Mode == "unmanaged-warning" {
-		lines = []string{"", bold + "  These open sessions are not managed by XSwap:" + reset}
-		for _, session := range p.selectedUnmanagedSessions() {
-			lines = append(lines, "    • "+sessionTitle(session, p.HandoffProject))
+		manual := p.selectedUnmanagedSessions()
+		if len(manual) > 0 {
+			warning := fmt.Sprintf("  %d open session(s) require manual resume.", len(manual))
+			lines = append(lines[:len(lines)-2], "\x1b[33m"+warning+reset,
+				muted+"  After transfer, close the old Codex process before running codex resume."+reset,
+				lines[len(lines)-2], lines[len(lines)-1])
 		}
-		lines = append(lines, "", "\x1b[33m  Close each session and reopen it with codex resume in this project."+reset,
-			muted+"  Then open XSwap and select the sessions again. No conversation was copied."+reset,
-			"", accent(p.Theme)+"  enter / esc Back"+reset)
 	}
 	if p.Mode == "rename-input" {
 		lines = append(lines, "", bold+"  Display name: "+p.Input+"█"+reset, muted+"  Type a name, or leave it empty to use the e-mail. Enter saves; Esc cancels."+reset)
@@ -632,9 +630,6 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 	}
 	if p.Mode == "confirm-project-switch" {
 		footer = "  enter / y Confirm continuation   esc Back   q Quit"
-	}
-	if p.Mode == "unmanaged-warning" {
-		footer = "  enter / esc Back   q Quit"
 	}
 	rows[p.Height-2] = accent(p.Theme) + footer + reset
 	rows[p.Height-1] = muted + "  ↑/↓ Navigate  ·  Enter Select  ·  Percentages show quota usage" + reset
@@ -688,11 +683,6 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 			p.Cursor = 0
 			return "", nil
 		}
-		if p.Mode == "unmanaged-warning" {
-			p.Mode = "session-select"
-			p.Offset = 0
-			return "", nil
-		}
 		p.Mode = "home"
 		p.Offset = 0
 		p.Pending = ""
@@ -713,13 +703,6 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 	if p.Mode == "confirm-project-switch" {
 		if key == "enter" || key == "y" || key == "Y" {
 			return handoffAction(p.HandoffProject, p.Pending, p.selectedSessions()), nil
-		}
-		return "", nil
-	}
-	if p.Mode == "unmanaged-warning" {
-		if key == "enter" {
-			p.Mode = "session-select"
-			p.Offset = 0
 		}
 		return "", nil
 	}
@@ -896,9 +879,6 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 		} else if p.Mode == "session-select" {
 			if len(p.selectedSessions()) == 0 {
 				p.Message = "Select at least one conversation to continue."
-			} else if len(p.selectedUnmanagedSessions()) > 0 {
-				p.Mode = "unmanaged-warning"
-				p.Offset = 0
 			} else if len(names) < 2 {
 				p.Message = "Add another account before continuing these conversations."
 			} else {
@@ -938,14 +918,11 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 			plan, err := a.planSelectedProjectHandoff(p.HandoffProject, names[p.Cursor], p.HandoffSelected)
 			if err != nil {
 				p.Message = err.Error()
-			} else if len(plan.Unmanaged) > 0 {
+			} else {
 				p.HandoffUnmanaged = map[string]bool{}
 				for _, session := range plan.Unmanaged {
 					p.HandoffUnmanaged[session.ID] = true
 				}
-				p.Mode = "unmanaged-warning"
-				p.Offset = 0
-			} else {
 				p.Pending = names[p.Cursor]
 				p.HandoffProject = plan.Project
 				p.HandoffSources = plan.Sources

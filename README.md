@@ -103,11 +103,13 @@ across every registered account. After choosing a project, the session picker
 shows that complete deduplicated list and identifies each conversation's source
 account. Every conversation is selected initially. Use `Space` to toggle one conversation, `a`
 to select or clear all, and `Enter` to choose the destination account. The final review shows
-the selected conversations and how many open managed sessions will restart. An
-open conversation that was started outside the XSwap wrapper is identified by
-its Codex writer lock. XSwap stops the handoff, names every affected conversation,
-and asks you to close it and reopen it with `codex resume` before trying again.
-Closed conversations do not need this step. Other projects and unselected
+the selected conversations, how many managed sessions will restart, and how
+many open sessions require manual resume. An open source conversation started
+outside the XSwap wrapper can still be copied after confirmation. XSwap cannot
+restart that process, so close the old Codex process before sending another
+message and run `codex resume` in the project to continue with the destination
+account. XSwap refuses the transfer if another active copy, including the
+destination copy, could be overwritten. Other projects and unselected
 conversations are left alone.
 
 Project selection is stored in `.xswap-account` at the repository root; the

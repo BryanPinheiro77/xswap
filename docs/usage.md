@@ -58,10 +58,13 @@ Choose **Continue sessions with another account…** in the panel, or run
 6. review the project, source, destination, selected conversations, and number
    of open managed sessions that will restart, then confirm with `Enter` or `y`.
 
-If a selected conversation is currently open outside XSwap supervision, the
-panel names it and stops before copying anything. Close that Codex process,
-reopen the conversation with `codex resume` in the same project, and select it
-again. Closed conversations can be copied without being reopened first.
+If a selected source conversation is currently open outside XSwap supervision,
+the review names it and marks it for manual resume. After confirmation XSwap
+copies and indexes the conversation but cannot stop its existing process. Close
+that old Codex process before sending another message, then run `codex resume`
+in the project to continue with the destination account. If the destination or
+another copy of the same conversation is open, XSwap refuses the transfer to
+avoid overwriting an active history.
 
 After confirmation XSwap:
 
@@ -83,9 +86,9 @@ earlier account. If both copies changed independently, XSwap reports a divergenc
 instead of overwriting either history. XSwap
 does not copy authentication, config, cache, database, or unrelated sessions.
 Open sessions started outside the XSwap wrapper cannot be restarted automatically.
-XSwap detects their active writer locks and requires them to be reopened through
-the wrapper before handoff, preventing two accounts from continuing divergent
-copies of the same conversation.
+XSwap detects their active writer locks, labels them for manual resume, and
+requires the old process to be closed before the destination copy is used. Once
+resumed through the wrapper, future handoffs can restart them automatically.
 
 The noninteractive `xswap project switch NAME` command selects every conversation
 in the project because it has no interactive session picker.
