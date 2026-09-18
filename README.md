@@ -91,10 +91,12 @@ adding, enable/disable, removal, theme, and quit. Arrow keys navigate; Enter
 selects; Esc goes back.
 
 **Switch account…** changes the global default for new Codex processes and does
-not move conversations. **Continue sessions with another account…** first lists
-the current directory's project conversations, with every conversation
-selected initially. Use `Space` to toggle one conversation, `a` to select or
-clear all, and `Enter` to choose the destination account. The final review shows
+not move conversations. Inside a project, **Continue sessions with another
+account…** immediately lists that project's conversations. From the user home,
+it first lists only existing projects found in Codex session metadata; XSwap does
+not scan every directory on the computer. After choosing a project, every
+conversation is selected initially. Use `Space` to toggle one conversation, `a`
+to select or clear all, and `Enter` to choose the destination account. The final review shows
 the selected conversations and how many open managed sessions will restart. An
 open conversation that was started outside the XSwap wrapper is identified by
 its Codex writer lock. XSwap stops the handoff, names every affected conversation,
@@ -116,9 +118,10 @@ the global account for future processes in unpinned directories. **Switch
 account…** changes only that global default: already running Codex sessions keep
 their current account and are not moved.
 
-When run directly from the user home, a handoff remains available for standalone
-conversations and updates the global account for unpinned directories instead of
-creating a broad `~/.xswap-account` file. Filesystem-root handoffs are refused.
+When run directly from the user home, the project picker also includes a Home
+entry when standalone conversations exist there. Choosing Home updates the global
+account for unpinned directories instead of creating a broad
+`~/.xswap-account` file. Filesystem-root handoffs are refused.
 
 ## Auto-switch
 

@@ -223,7 +223,7 @@ func testPanelInputHandoff(t *testing.T, action string) {
 			} else if action == "remove" {
 				finished = strings.Contains(output.String(), "XSWAP_PANEL_ACCOUNTS:default")
 			} else if action == "handoff" {
-				finished = strings.Contains(output.String(), "XSWAP_PANEL_ACTION:project-handoff:work:dddddddd-dddd-4ddd-8ddd-dddddddddddd")
+				finished = strings.Contains(output.String(), "XSWAP_PANEL_ACTION:project-handoff:") && strings.Contains(output.String(), "dddddddd-dddd-4ddd-8ddd-dddddddddddd")
 			}
 			if finished {
 				if !strings.Contains(output.String(), "\x1b[?25h\x1b[?1049l") {

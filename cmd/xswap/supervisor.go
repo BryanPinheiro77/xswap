@@ -38,6 +38,12 @@ type projectHandoffPlan struct {
 	Unmanaged []codexSession
 }
 
+type sessionProject struct {
+	Root    string
+	Count   int
+	Updated time.Time
+}
+
 type projectHandoffResult struct {
 	Project      string
 	Source       string
@@ -244,6 +250,51 @@ func (a *App) managedForProject(project string) ([]managedCodex, error) {
 	}
 	sort.Slice(records, func(i, j int) bool { return records[i].SupervisorPID < records[j].SupervisorPID })
 	return records, nil
+}
+
+func (a *App) sessionProjects() ([]sessionProject, error) {
+	type discovered struct {
+		updated time.Time
+		ids     map[string]bool
+	}
+	found := map[string]*discovered{}
+	for _, name := range a.names() {
+		home, err := a.require(name)
+		if err != nil {
+			return nil, err
+		}
+		sessions, err := sessionsInProfile(home)
+		if err != nil {
+			return nil, err
+		}
+		for _, session := range sessions {
+			root, rootErr := projectRoot(session.CWD)
+			if rootErr != nil || validateHandoffScope(root) != nil {
+				continue
+			}
+			root = filepath.Clean(root)
+			item := found[root]
+			if item == nil {
+				item = &discovered{ids: map[string]bool{}}
+				found[root] = item
+			}
+			item.ids[session.ID] = true
+			if session.Updated.After(item.updated) {
+				item.updated = session.Updated
+			}
+		}
+	}
+	projects := make([]sessionProject, 0, len(found))
+	for root, item := range found {
+		projects = append(projects, sessionProject{Root: root, Count: len(item.ids), Updated: item.updated})
+	}
+	sort.Slice(projects, func(i, j int) bool {
+		if projects[i].Updated.Equal(projects[j].Updated) {
+			return projects[i].Root < projects[j].Root
+		}
+		return projects[i].Updated.After(projects[j].Updated)
+	})
+	return projects, nil
 }
 
 func (a *App) projectHandoffSource(directory string) (projectHandoffPlan, error) {

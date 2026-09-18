@@ -164,19 +164,15 @@ func readSession(path string) (codexSession, error) {
 	return codexSession{ID: strings.ToLower(id), CWD: filepath.Clean(metadata.CWD), Path: path, Preview: preview, Created: created, Updated: info.ModTime()}, nil
 }
 
-func sessionsInProject(home, project string) ([]codexSession, error) {
+func sessionsInProfile(home string) ([]codexSession, error) {
 	sessionsRoot := filepath.Join(home, "sessions")
-	root, err := filepath.Abs(project)
-	if err != nil {
-		return nil, err
-	}
-	if _, err = os.Stat(sessionsRoot); os.IsNotExist(err) {
+	if _, err := os.Stat(sessionsRoot); os.IsNotExist(err) {
 		return nil, nil
 	} else if err != nil {
 		return nil, err
 	}
 	found := map[string]codexSession{}
-	err = filepath.WalkDir(sessionsRoot, func(path string, entry os.DirEntry, walkErr error) error {
+	err := filepath.WalkDir(sessionsRoot, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -193,9 +189,6 @@ func sessionsInProject(home, project string) ([]codexSession, error) {
 		if readErr != nil {
 			return fmt.Errorf("read session %s: %w", path, readErr)
 		}
-		if !pathWithin(root, session.CWD) {
-			return nil
-		}
 		if _, duplicate := found[session.ID]; duplicate {
 			return fmt.Errorf("duplicate session id %s", session.ID)
 		}
@@ -211,6 +204,30 @@ func sessionsInProject(home, project string) ([]codexSession, error) {
 	}
 	sort.Slice(sessions, func(i, j int) bool { return sessions[i].Updated.After(sessions[j].Updated) })
 	return sessions, nil
+}
+
+func sessionsInProject(home, project string) ([]codexSession, error) {
+	root, err := filepath.Abs(project)
+	if err != nil {
+		return nil, err
+	}
+	sessions, err := sessionsInProfile(home)
+	if err != nil {
+		return nil, err
+	}
+	found := make([]codexSession, 0, len(sessions))
+	for _, session := range sessions {
+		if isHomeScope(root) {
+			if filepath.Clean(session.CWD) == filepath.Clean(root) {
+				found = append(found, session)
+			}
+			continue
+		}
+		if pathWithin(root, session.CWD) {
+			found = append(found, session)
+		}
+	}
+	return found, nil
 }
 
 func fileIsPrefix(prefixPath, fullPath string) (bool, error) {

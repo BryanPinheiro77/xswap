@@ -46,11 +46,14 @@ global account for unpinned directories without creating `~/.xswap-account`.
 Choose **Continue sessions with another account…** in the panel, or run
 `project switch`, for a handoff. The panel follows this sequence:
 
-1. show the current project's conversations, all selected initially;
-2. use `Space` to toggle one conversation, `a` to select or clear all, and
+1. when opened from the user home, select from existing projects discovered in
+   Codex session metadata; directories without conversations are not listed;
+2. inside a project, skip that picker and show its conversations directly;
+3. show the chosen project's conversations, all selected initially;
+4. use `Space` to toggle one conversation, `a` to select or clear all, and
    `Enter` to continue;
-3. select the destination account; and
-4. review the project, source, destination, selected conversations, and number
+5. select the destination account; and
+6. review the project, source, destination, selected conversations, and number
    of open managed sessions that will restart, then confirm with `Enter` or `y`.
 
 If a selected conversation is currently open outside XSwap supervision, the

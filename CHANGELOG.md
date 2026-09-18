@@ -26,6 +26,8 @@ tags; unreleased work stays in this section until a release is prepared.
 - Show the source and destination account after a handoff, mark the account
   effective for the current project as active, and identify a different global
   default separately.
+- Open the current project's conversations directly, while offering a
+  session-derived project picker when XSwap is opened from the user home.
 
 ### Added
 

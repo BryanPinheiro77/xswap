@@ -61,6 +61,12 @@ conversation; the handoff is blocked and the panel names it so the user can
 close it and reopen it through `codex resume`. This prevents the source and
 destination histories from accepting new messages independently.
 
+The panel derives its home-screen project picker only from working directories
+stored in Codex session metadata across registered profiles. It resolves Git
+roots, ignores missing directories, deduplicates copied conversation IDs, and
+orders projects by recent session activity. Opening the panel inside a project
+skips this discovery step and opens that project's conversations directly.
+
 Repository and directory scopes use `.xswap-account`. Git repositories receive
 a local `/.xswap-account` rule in `.git/info/exclude` before the pin is written;
 linked worktrees resolve their common Git metadata directory. A handoff rooted

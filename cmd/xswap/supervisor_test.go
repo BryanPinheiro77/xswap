@@ -104,6 +104,47 @@ func TestProjectHandoffFindsProjectSessionsOutsideSelectedAccount(t *testing.T) 
 	}
 }
 
+func TestSessionProjectsComeOnlyFromExistingCodexSessions(t *testing.T) {
+	a := fixture(t)
+	ready(t, a, "work")
+	first := t.TempDir()
+	second := t.TempDir()
+	unused := t.TempDir()
+	for _, project := range []string{first, second} {
+		if err := os.Mkdir(filepath.Join(project, ".git"), 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Mkdir(filepath.Join(first, "service"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	firstID := "13131313-1313-4313-8313-131313131313"
+	writeTestSession(t, a.DefaultHome, "2026/09/17", firstID, filepath.Join(first, "service"), "first project")
+	workHome, _ := a.profile("work")
+	writeTestSession(t, workHome, "2026/09/17", firstID, filepath.Join(first, "service"), "copied first project")
+	writeTestSession(t, a.DefaultHome, "2026/09/18", "14141414-1414-4414-8414-141414141414", second, "second project")
+	missing := filepath.Join(t.TempDir(), "removed")
+	writeTestSession(t, a.DefaultHome, "2026/09/18", "15151515-1515-4515-8515-151515151515", missing, "removed project")
+
+	projects, err := a.sessionProjects()
+	if err != nil {
+		t.Fatal(err)
+	}
+	counts := map[string]int{}
+	for _, project := range projects {
+		counts[project.Root] = project.Count
+	}
+	if counts[first] != 1 || counts[second] != 1 {
+		t.Fatal("session projects were not discovered and deduplicated", counts)
+	}
+	if _, ok := counts[unused]; ok {
+		t.Fatal("directory without Codex sessions was listed")
+	}
+	if _, ok := counts[missing]; ok {
+		t.Fatal("removed project was listed")
+	}
+}
+
 func TestProjectHandoffBlocksOpenSessionOutsideSupervisor(t *testing.T) {
 	a := fixture(t)
 	ready(t, a, "work")
@@ -276,8 +317,36 @@ func TestProjectSwitchPanelExplainsConsequencesBeforeAction(t *testing.T) {
 		}
 	}
 	action, err := p.key(a, names, "enter")
-	if err != nil || !strings.HasPrefix(action, "project-handoff:work:66666666-6666-4666-8666-666666666666") {
+	actionProject, target, selected, parseErr := parseHandoffAction(action)
+	if err != nil || parseErr != nil || actionProject != project || target != "work" || !selected["66666666-6666-4666-8666-666666666666"] {
 		t.Fatal(action, err)
+	}
+}
+
+func TestHomePanelSelectsProjectBeforeSessions(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	a := fixture(t)
+	ready(t, a, "work")
+	project := t.TempDir()
+	if err := os.Mkdir(filepath.Join(project, ".git"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	writeTestSession(t, a.DefaultHome, "2026/09/18", "16161616-1616-4616-8616-161616161616", project, "select this project")
+	t.Chdir(home)
+	p := Panel{Mode: "home", Records: map[string]Record{}, Width: 100, Height: 30}
+	names := a.names()
+	for index, item := range p.menu() {
+		if item == "Continue sessions with another account…" {
+			p.MenuCursor = index
+		}
+	}
+	if _, err := p.key(a, names, "enter"); err != nil || p.Mode != "project-select" || len(p.HandoffProjects) != 1 {
+		t.Fatal("home panel did not open the project picker", p.Mode, len(p.HandoffProjects), err)
+	}
+	if _, err := p.key(a, names, "enter"); err != nil || p.Mode != "session-select" || p.HandoffProject != project {
+		t.Fatal("project picker did not open its conversations", p.Mode, p.HandoffProject, err)
 	}
 }
 
