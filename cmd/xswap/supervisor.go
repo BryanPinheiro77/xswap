@@ -54,6 +54,7 @@ type projectHandoffResult struct {
 	Already      int
 	Restarted    int
 	NotRestarted int
+	Manual       []codexSession
 	Global       bool
 }
 
@@ -502,6 +503,38 @@ func filterHandoffPlan(plan projectHandoffPlan, selected map[string]bool) (proje
 	return plan, nil
 }
 
+func classifyOpenUnmanaged(plan projectHandoffPlan) (manual, conflicts []codexSession) {
+	manualIDs := map[string]bool{}
+	conflictKeys := map[string]bool{}
+	for _, open := range plan.Unmanaged {
+		selected, ok := findSessionByID(plan.Sessions, open.ID)
+		if !ok {
+			continue
+		}
+		if open.Account == selected.Account {
+			if !manualIDs[open.ID] {
+				manual = append(manual, selected)
+				manualIDs[open.ID] = true
+			}
+			continue
+		}
+		key := open.Account + "\x00" + open.ID
+		if !conflictKeys[key] {
+			conflicts = append(conflicts, open)
+			conflictKeys[key] = true
+		}
+	}
+	return manual, conflicts
+}
+
+func unmanagedConflictError(project string, sessions []codexSession) error {
+	titles := make([]string, 0, len(sessions))
+	for _, session := range sessions {
+		titles = append(titles, sessionTitle(session, project)+" ("+session.Account+")")
+	}
+	return fmt.Errorf("another copy of the selected conversation is open: %s; close it before continuing", strings.Join(titles, "; "))
+}
+
 func (a *App) planSelectedProjectHandoff(directory, target string, selected map[string]bool) (projectHandoffPlan, error) {
 	if _, err := a.require(target); err != nil {
 		return projectHandoffPlan{}, err
@@ -547,6 +580,11 @@ func (a *App) planSelectedProjectHandoff(directory, target string, selected map[
 		}
 	}
 	plan.Unmanaged = unmanaged
+	manual, conflicts := classifyOpenUnmanaged(plan)
+	if len(conflicts) > 0 {
+		return projectHandoffPlan{}, unmanagedConflictError(plan.Project, conflicts)
+	}
+	plan.Unmanaged = manual
 	return plan, nil
 }
 
@@ -580,13 +618,10 @@ func (a *App) requestProjectHandoff(plan projectHandoffPlan) (projectHandoffResu
 			transferSources = append(transferSources, source)
 		}
 	}
-	result := projectHandoffResult{Project: plan.Project, Sources: transferSources, Target: plan.Target, Sessions: len(plan.Sessions), Global: isHomeScope(plan.Project)}
-	if len(plan.Unmanaged) > 0 {
-		titles := make([]string, 0, len(plan.Unmanaged))
-		for _, session := range plan.Unmanaged {
-			titles = append(titles, sessionTitle(session, plan.Project)+" ("+session.Account+")")
-		}
-		return result, fmt.Errorf("open sessions are outside XSwap supervision: %s; close them, reopen with codex resume, and try again", strings.Join(titles, "; "))
+	result := projectHandoffResult{Project: plan.Project, Sources: transferSources, Target: plan.Target, Sessions: len(plan.Sessions), Manual: plan.Unmanaged, Global: isHomeScope(plan.Project)}
+	manualIDs := map[string]bool{}
+	for _, session := range plan.Unmanaged {
+		manualIDs[session.ID] = true
 	}
 	// Prepare every selected conversation before changing the project account or
 	// stopping a terminal. Active source rollouts can append after this snapshot;
@@ -668,6 +703,12 @@ func (a *App) requestProjectHandoff(plan projectHandoffPlan) (projectHandoffResu
 	refreshed := map[string][]codexSession{}
 	for _, session := range plan.Sessions {
 		if session.Account == plan.Target {
+			continue
+		}
+		if manualIDs[session.ID] {
+			// The source process is outside XSwap supervision and remains open.
+			// Keep the explicitly confirmed snapshot instead of racing a second
+			// copy; the user must close it before resuming the destination copy.
 			continue
 		}
 		if _, ok := refreshed[session.Account]; !ok {

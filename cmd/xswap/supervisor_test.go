@@ -209,9 +209,10 @@ func TestSessionProjectsComeOnlyFromExistingCodexSessions(t *testing.T) {
 	}
 }
 
-func TestProjectHandoffBlocksOpenSessionOutsideSupervisor(t *testing.T) {
+func TestProjectHandoffCopiesOpenSourceSessionForManualResume(t *testing.T) {
 	a := fixture(t)
 	ready(t, a, "work")
+	a.SessionIndexer = func(string, string) error { return nil }
 	project := t.TempDir()
 	id := "34343434-3434-4434-8434-343434343434"
 	writeTestSession(t, a.DefaultHome, "2026/09/18", id, project, "legacy open conversation")
@@ -222,15 +223,21 @@ func TestProjectHandoffBlocksOpenSessionOutsideSupervisor(t *testing.T) {
 	if err != nil || len(plan.Unmanaged) != 1 || plan.Unmanaged[0].ID != id {
 		t.Fatal("open unmanaged conversation was not identified", plan, err)
 	}
-	if _, err = a.requestProjectHandoff(plan); err == nil || !strings.Contains(err.Error(), "legacy open conversation") {
-		t.Fatal("handoff did not name and block the open unmanaged conversation", err)
+	result, err := a.requestProjectHandoff(plan)
+	if err != nil || result.Copied != 1 || len(result.Manual) != 1 || result.Manual[0].ID != id {
+		t.Fatal("open source conversation was not prepared for manual resume", result, err)
 	}
-	if exists(filepath.Join(project, projectAccountFile)) {
-		t.Fatal("blocked handoff changed the project account")
+	if selected, accountErr := a.accountForDirectory(project); accountErr != nil || selected != "work" {
+		t.Fatal("manual handoff did not change the project account", selected, accountErr)
+	}
+	workHome, _ := a.require("work")
+	sessions, sessionsErr := sessionsInProject(workHome, project)
+	if sessionsErr != nil || len(sessions) != 1 || sessions[0].ID != id {
+		t.Fatal("manual handoff did not copy the conversation", sessions, sessionsErr)
 	}
 }
 
-func TestPanelExplainsOpenSessionOutsideSupervisor(t *testing.T) {
+func TestPanelConfirmsManualResumeForOpenSourceSession(t *testing.T) {
 	a := fixture(t)
 	ready(t, a, "work")
 	project := t.TempDir()
@@ -248,15 +255,48 @@ func TestPanelExplainsOpenSessionOutsideSupervisor(t *testing.T) {
 	if _, err := p.key(a, names, "enter"); err != nil || p.Mode != "session-select" || !p.HandoffUnmanaged[id] {
 		t.Fatal("session picker did not mark the unmanaged conversation", p.Mode, err)
 	}
-	if _, err := p.key(a, names, "enter"); err != nil || p.Mode != "unmanaged-warning" {
-		t.Fatal("panel did not open the restart warning", p.Mode, err)
+	if _, err := p.key(a, names, "enter"); err != nil || p.Mode != "project-switch" {
+		t.Fatal("panel did not advance to destination selection", p.Mode, err)
+	}
+	if _, err := p.key(a, names, "enter"); err != nil || p.Mode != "confirm-project-switch" {
+		t.Fatal("panel did not open the continuation review", p.Mode, err)
 	}
 	s, _ := a.settings()
 	view := stripANSI(p.render(a, names, s, time.Now()))
-	for _, phrase := range []string{"restart this conversation", "codex resume", "No conversation was copied"} {
+	for _, phrase := range []string{"restart this conversation", "require manual resume", "close the old Codex process", "codex resume"} {
 		if !strings.Contains(view, phrase) {
 			t.Fatalf("warning omitted %q:\n%s", phrase, view)
 		}
+	}
+	action, err := p.key(a, names, "enter")
+	if err != nil || !strings.HasPrefix(action, "project-handoff:") {
+		t.Fatal("Enter did not confirm manual continuation", action, err)
+	}
+}
+
+func TestProjectHandoffRejectsOpenDestinationCopy(t *testing.T) {
+	a := fixture(t)
+	ready(t, a, "work")
+	project := t.TempDir()
+	id := "56565656-5656-4656-8656-565656565656"
+	sourcePath := writeTestSession(t, a.DefaultHome, "2026/09/18", id, project, "active destination conflict")
+	session, err := readSession(sourcePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err = a.copySession("default", "work", session); err != nil {
+		t.Fatal(err)
+	}
+	appendSessionEvent(t, sourcePath, "newer source event")
+	workHome, _ := a.require("work")
+	a.SessionActive = func(home, sessionID string) (bool, error) {
+		return home == workHome && sessionID == id, nil
+	}
+	if _, err = a.planProjectHandoff(project, "work"); err == nil || !strings.Contains(err.Error(), "another copy") {
+		t.Fatal("handoff accepted an open destination copy", err)
+	}
+	if exists(filepath.Join(project, projectAccountFile)) {
+		t.Fatal("rejected handoff changed the project account")
 	}
 }
 

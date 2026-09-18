@@ -371,7 +371,7 @@ func (a *App) projectCommand(args []string) error {
 			if !interactive() {
 				return errors.New("use --yes to confirm a project account switch in scripts")
 			}
-			fmt.Printf("Switch %s sessions from %s to %s, copy %d conversation(s), and restart %d managed session(s)? [y/N] ", plan.Project, strings.Join(plan.Sources, ", "), plan.Target, len(plan.Sessions), len(plan.Managed))
+			fmt.Printf("Switch %s sessions from %s to %s, copy %d conversation(s), restart %d managed session(s), and leave %d for manual resume? [y/N] ", plan.Project, strings.Join(plan.Sources, ", "), plan.Target, len(plan.Sessions), len(plan.Managed), len(plan.Unmanaged))
 			answer, _ := bufio.NewReader(os.Stdin).ReadString('\n')
 			if strings.ToLower(strings.TrimSpace(answer)) != "y" {
 				fmt.Println("Project switch cancelled.")
@@ -434,6 +434,13 @@ func printProjectHandoffResult(a *App, result projectHandoffResult) {
 	}
 	if result.NotRestarted > 0 {
 		fmt.Printf("Managed sessions that could not be resumed automatically: %d. Use codex resume to reopen them.\n", result.NotRestarted)
+	}
+	if len(result.Manual) > 0 {
+		fmt.Printf("Open sessions requiring manual resume: %d.\n", len(result.Manual))
+		for _, session := range result.Manual {
+			fmt.Printf("  • %s (%s)\n", sessionTitle(session, result.Project), handoffAccountLabel(a, session.Account))
+		}
+		fmt.Println("Close each source Codex process before sending another message, then run codex resume in the project.")
 	}
 }
 func (a *App) list() error {
