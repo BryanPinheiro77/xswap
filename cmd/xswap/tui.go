@@ -674,7 +674,7 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 					return "", nil
 				}
 				if len(plan.Sessions) == 0 {
-					p.Message = "No conversations were found for the current project."
+					p.Message = "No conversations were found for this project in any XSwap account."
 					return "", nil
 				}
 				p.HandoffProject = plan.Project

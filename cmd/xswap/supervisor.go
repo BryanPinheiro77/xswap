@@ -257,11 +257,7 @@ func (a *App) projectHandoffSource(directory string) (projectHandoffPlan, error)
 	if err != nil {
 		return projectHandoffPlan{}, err
 	}
-	sourceHome, err := a.require(source)
-	if err != nil {
-		return projectHandoffPlan{}, err
-	}
-	sessions, err := sessionsInProject(sourceHome, project)
+	source, sessions, err := a.handoffSessions(project, source)
 	if err != nil {
 		return projectHandoffPlan{}, err
 	}
@@ -282,6 +278,39 @@ func (a *App) projectHandoffSource(directory string) (projectHandoffPlan, error)
 		managed = append(managed, record)
 	}
 	return projectHandoffPlan{Project: project, Source: source, Sessions: sessions, Managed: managed}, nil
+}
+
+func (a *App) handoffSessions(project, preferred string) (string, []codexSession, error) {
+	home, err := a.require(preferred)
+	if err != nil {
+		return "", nil, err
+	}
+	sessions, err := sessionsInProject(home, project)
+	if err != nil || len(sessions) > 0 {
+		return preferred, sessions, err
+	}
+	selected := preferred
+	for _, name := range a.names() {
+		if name == preferred {
+			continue
+		}
+		home, profileErr := a.require(name)
+		if profileErr != nil {
+			return "", nil, profileErr
+		}
+		candidate, sessionsErr := sessionsInProject(home, project)
+		if sessionsErr != nil {
+			return "", nil, sessionsErr
+		}
+		if len(candidate) == 0 {
+			continue
+		}
+		if len(sessions) == 0 || candidate[0].Updated.After(sessions[0].Updated) {
+			selected = name
+			sessions = candidate
+		}
+	}
+	return selected, sessions, nil
 }
 
 func selectedSessionMap(sessions []codexSession) map[string]bool {

@@ -86,6 +86,24 @@ func TestProjectHandoffCopiesAllProjectSessionsAndPinsTarget(t *testing.T) {
 	}
 }
 
+func TestProjectHandoffFindsProjectSessionsOutsideSelectedAccount(t *testing.T) {
+	a := fixture(t)
+	ready(t, a, "work")
+	if err := a.selectAccount("work"); err != nil {
+		t.Fatal(err)
+	}
+	project := t.TempDir()
+	id := "12121212-1212-4212-8212-121212121212"
+	writeTestSession(t, a.DefaultHome, "2026/09/18", id, project, "project conversation")
+	plan, err := a.projectHandoffSource(project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Source != "default" || len(plan.Sessions) != 1 || plan.Sessions[0].ID != id {
+		t.Fatal("did not find the project's conversation in its actual account", plan)
+	}
+}
+
 func TestProjectHandoffRejectsDivergenceBeforeChangingProjectAccount(t *testing.T) {
 	a := fixture(t)
 	ready(t, a, "work")
