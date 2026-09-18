@@ -58,7 +58,7 @@ func previewFromEnvelope(line []byte) string {
 		return ""
 	}
 	if payload.Type == "user_message" && strings.TrimSpace(payload.Message) != "" {
-		return strings.TrimSpace(payload.Message)
+		return userSessionPreview(payload.Message)
 	}
 	if payload.Role == "user" {
 		parts := []string{}
@@ -67,9 +67,19 @@ func previewFromEnvelope(line []byte) string {
 				parts = append(parts, strings.TrimSpace(item.Text))
 			}
 		}
-		return strings.Join(parts, " ")
+		return userSessionPreview(strings.Join(parts, " "))
 	}
 	return ""
+}
+
+func userSessionPreview(message string) string {
+	message = strings.TrimSpace(message)
+	// Codex records runtime metadata as a user message before the first real
+	// prompt. It identifies the execution environment, not the conversation.
+	if strings.HasPrefix(message, "<environment_context>") {
+		return ""
+	}
+	return message
 }
 
 func pathWithin(root, candidate string) bool {

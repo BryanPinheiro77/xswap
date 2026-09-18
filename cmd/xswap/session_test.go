@@ -19,6 +19,24 @@ func writeTestSession(t *testing.T, home, date, id, cwd, message string) string 
 	return path
 }
 
+func TestReadSessionSkipsEnvironmentContextForPreview(t *testing.T) {
+	home := t.TempDir()
+	project := t.TempDir()
+	id := "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+	path := filepath.Join(home, "sessions", "2026/09/17", "rollout-"+id+".jsonl")
+	content := fmt.Sprintf("{\"type\":\"session_meta\",\"payload\":{\"id\":%q,\"cwd\":%q}}\n{\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"<environment_context>technical metadata</environment_context>\"}]}}\n{\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Implement account handoff\"}]}}\n", id, project)
+	if err := atomicWrite(path, []byte(content)); err != nil {
+		t.Fatal(err)
+	}
+	session, err := readSession(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if session.Preview != "Implement account handoff" {
+		t.Fatalf("unexpected preview %q", session.Preview)
+	}
+}
+
 func TestSessionsInProjectAndTransfer(t *testing.T) {
 	a := fixture(t)
 	ready(t, a, "work")
