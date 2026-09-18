@@ -136,7 +136,7 @@ type Panel struct {
 	HandoffProject, HandoffSource         string
 }
 
-var menuItems = []string{"Switch account…", "Switch project account…", "Watch accounts", "Auto-switch view", "Add account…", "Rename account…", "Disable / enable account…", "Remove account…", "Theme…", "Quit"}
+var menuItems = []string{"Switch account…", "Continue sessions with another account…", "Watch accounts", "Auto-switch view", "Add account…", "Rename account…", "Disable / enable account…", "Remove account…", "Theme…", "Quit"}
 
 func (p *Panel) menu() []string {
 	items := []string{}
@@ -319,7 +319,7 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 		rows[0] = "Resize the terminal to at least 50×20. Press q to quit."
 		return renderRows(rows, p.Width)
 	}
-	heading := map[string]string{"home": "xswap", "watch": "watching all accounts", "auto": "auto-switch view", "switch": "select account", "project-switch": "select the project's new account", "rename": "select account to rename", "rename-input": "rename account", "disable": "disable / enable account", "remove": "remove account", "confirm": "confirm removal", "confirm-update": "confirm update", "confirm-project-switch": "confirm project account switch"}[p.Mode]
+	heading := map[string]string{"home": "xswap", "watch": "watching all accounts", "auto": "auto-switch view", "switch": "select account", "project-switch": "select destination account", "rename": "select account to rename", "rename-input": "rename account", "disable": "disable / enable account", "remove": "remove account", "confirm": "confirm removal", "confirm-update": "confirm update", "confirm-project-switch": "confirm session continuation"}[p.Mode]
 	if p.Mode == "home" {
 		heading += " " + clean(version)
 	}
@@ -554,7 +554,7 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 			switch p.menu()[p.MenuCursor] {
 			case "Switch account…":
 				p.Mode = "switch"
-			case "Switch project account…":
+			case "Continue sessions with another account…":
 				p.Mode = "project-switch"
 			case "Watch accounts":
 				p.Mode = "watch"

@@ -37,10 +37,10 @@ history or restarting anything. XSwap stores the name in `.xswap-account` at the
 repository root, and the nearest parent file wins. Add the file to `.gitignore`
 when each contributor uses different local account names.
 
-Choose **Switch project account…** in the panel, or run `project switch`, for a
-full handoff. Before making changes, XSwap shows the source and destination,
-the number of project conversations to copy, and the number of running sessions
-it can restart. After confirmation it:
+Choose **Continue sessions with another account…** in the panel, or run
+`project switch`, for a full handoff. Before making changes, XSwap shows the
+source and destination, the number of project conversations to copy, and the
+number of running sessions it can restart. After confirmation it:
 
 1. pins the destination account for the repository;
 2. stops only Codex child processes supervised by the XSwap wrapper in that project;

@@ -90,9 +90,10 @@ adding, enable/disable, removal, theme, and quit. Arrow keys navigate; Enter
 selects; Esc goes back.
 
 **Switch account…** changes the global default for new Codex processes and does
-not move conversations. **Switch project account…** pins the current repository,
-copies only that project's conversations to the selected account, and restarts
-open sessions that were launched through the supervised XSwap `codex` wrapper.
+not move conversations. **Continue sessions with another account…** pins the
+current repository, copies only that project's conversations to the selected
+account, and restarts open sessions that were launched through the supervised
+XSwap `codex` wrapper.
 The confirmation screen shows the exact conversation and managed-session counts.
 Other projects and unmanaged terminal processes are left alone.
 

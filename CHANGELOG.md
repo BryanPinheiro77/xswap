@@ -5,6 +5,11 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ## Unreleased
 
+### Changed
+
+- Rename the project handoff menu action to **Continue sessions with another
+  account…** so its effect is clear before selecting a destination account.
+
 ### Added
 
 - Add project-local account selection through `.xswap-account` and the

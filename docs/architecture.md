@@ -49,12 +49,12 @@ wrapper resolves the nearest file before launch; an explicit `CODEX_HOME` keeps
 precedence. Each wrapper process supervises only the Codex child it started and
 publishes private runtime metadata under the XSwap state directory.
 
-The project-switch action requires confirmation. It writes a handoff request for
-each live managed child in the selected project, stops those child process groups,
-and lets their original wrappers copy and resume the matching conversation in the
-same terminal and working directory. The coordinator then copies the remaining
-project conversations. It never signals an unmanaged process or a session from
-another project.
+The session-continuation action requires confirmation. It writes a handoff
+request for each live managed child in the selected project, stops those child
+process groups, and lets their original wrappers copy and resume the matching
+conversation in the same terminal and working directory. The coordinator then
+copies the remaining project conversations. It never signals an unmanaged
+process or a session from another project.
 
 Transfers parse the rollout's `session_meta`, require a UUID and an absolute
 working directory inside the project, reject symlinks and path traversal, and
