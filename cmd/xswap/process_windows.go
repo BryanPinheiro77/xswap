@@ -17,8 +17,7 @@ import (
 
 const batchPercent = "XSWAP_BATCH_LITERAL_PERCENT"
 
-func readStdin(buffer []byte) (int, error) { return os.Stdin.Read(buffer) }
-func isRunnable(info os.FileInfo) bool     { return !info.IsDir() }
+func isRunnable(info os.FileInfo) bool { return !info.IsDir() }
 func processCommand(binary string, args ...string) *exec.Cmd {
 	extension := strings.ToLower(filepath.Ext(binary))
 	if extension != ".cmd" && extension != ".bat" {
