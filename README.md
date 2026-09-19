@@ -104,9 +104,15 @@ not scan every directory on the computer. Each row counts unique conversations
 across every registered account. After choosing a project, the session picker
 shows that complete deduplicated list and identifies each conversation's source
 account. Every conversation is selected initially. Use `Space` to toggle one conversation, `a`
-to select or clear all, and `Enter` to choose the destination account. The final review shows
+to select or clear all. If a conversation changed independently in multiple
+accounts, the picker marks it as diverged. Deselect it to continue with the
+other conversations, or press `Enter` and explicitly choose which account's
+history to keep. Then choose the destination account. The final review shows
 the selected conversations, how many managed sessions will restart, and how
-many open sessions require manual resume. An open source conversation started
+many open sessions require manual resume. When resolving a divergence would
+replace a different destination history, XSwap first moves that history to a
+private archive under `~/.codex-swap/session-conflicts` and reports its path.
+An open source conversation started
 outside the XSwap wrapper can still be copied after confirmation. XSwap cannot
 restart that process, so close the old Codex process before sending another
 message and run `codex resume` in the project to continue with the destination

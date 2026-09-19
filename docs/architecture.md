@@ -78,7 +78,12 @@ orders projects by recent session activity. Opening the panel inside a project
 skips this discovery step and opens that project's conversations directly.
 Conversation IDs copied between profiles are deduplicated; the longest compatible
 history is used, active managed copies take precedence when safe, and divergent
-copies stop the handoff. A single confirmation can therefore consolidate
+copies become per-conversation conflicts. The panel can omit a conflict or
+requires the user to choose its source account before destination selection.
+If the destination has a different copy, XSwap validates and moves it into a
+private `session-conflicts` archive before copying the selected history. An
+archive failure leaves the destination in place, and a copy failure restores
+the archived file. Other account copies remain untouched. A single confirmation can therefore consolidate
 selected conversations from multiple source accounts into one destination.
 
 Repository and directory scopes use `.xswap-account`. Git repositories receive
