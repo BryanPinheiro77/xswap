@@ -5,7 +5,7 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ## Unreleased
 
-## v0.5.0 — 2026-09-18
+## v0.5.0 — 2026-09-19
 
 ### Changed
 
