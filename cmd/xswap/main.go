@@ -429,6 +429,12 @@ func printProjectHandoffResult(a *App, result projectHandoffResult) {
 		fmt.Printf("Project %s now uses %s.\n", result.Project, handoffAccountLabel(a, result.Target))
 	}
 	fmt.Printf("Conversations: %d copied, %d already present.\n", result.Copied, result.Already)
+	if len(result.Archives) > 0 {
+		fmt.Printf("Divergent destination copies archived: %d.\n", len(result.Archives))
+		for _, archive := range result.Archives {
+			fmt.Printf("  • %s\n", archive)
+		}
+	}
 	if result.Restarted > 0 {
 		fmt.Printf("Managed Codex sessions resumed automatically: %d.\n", result.Restarted)
 	}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,16 +12,21 @@ import (
 func TestResumeSessionID(t *testing.T) {
 	id := "11111111-1111-4111-8111-111111111111"
 	for _, test := range []struct {
-		args []string
-		want string
+		args   []string
+		want   string
+		resume bool
 	}{
-		{[]string{"resume", id}, id},
-		{[]string{"-c", "example=true", "resume", id, "-C", "/tmp/project"}, id},
-		{[]string{"resume", "--last"}, ""},
-		{[]string{"exec", "resume", "something"}, ""},
+		{[]string{"resume", id}, id, true},
+		{[]string{"-c", "example=true", "resume", id, "-C", "/tmp/project"}, id, true},
+		{[]string{"resume", "--last"}, "", true},
+		{[]string{"exec", "resume", "something"}, "", false},
+		{nil, "", false},
 	} {
 		if got := resumeSessionID(test.args); got != test.want {
 			t.Fatalf("resumeSessionID(%v) = %q, want %q", test.args, got, test.want)
+		}
+		if got := resumeCommandIndex(test.args) >= 0; got != test.resume {
+			t.Fatalf("resumeCommandIndex(%v) found=%v, want %v", test.args, got, test.resume)
 		}
 	}
 }
@@ -45,6 +51,78 @@ func TestIdentifyManagedSession(t *testing.T) {
 	writeTestSession(t, home, "2026/09/18", "33333333-3333-4333-8333-333333333333", cwd, "ambiguous")
 	if _, err = identifyManagedSession(home, project, cwd, "", started); err == nil || !strings.Contains(err.Error(), "found 2 candidates") {
 		t.Fatal("ambiguous session was accepted", err)
+	}
+}
+
+func TestInteractiveResumeResolvesNewActiveWriterAndPersistsSession(t *testing.T) {
+	a := fixture(t)
+	ready(t, a, "work")
+	project := t.TempDir()
+	oldID := "24242424-2424-4424-8424-242424242424"
+	selectedID := "25252525-2525-4525-8525-252525252525"
+	writeTestSession(t, a.DefaultHome, "2026/09/17", oldID, project, "already open")
+	selectedPath := writeTestSession(t, a.DefaultHome, "2026/09/18", selectedID, project, "selected in resume picker")
+	a.SessionActive = func(home, id string) (bool, error) {
+		return home == a.DefaultHome && (id == oldID || id == selectedID), nil
+	}
+	record := managedCodex{
+		SupervisorPID:      os.Getpid(),
+		ChildPID:           os.Getpid(),
+		Account:            "default",
+		Project:            project,
+		CWD:                project,
+		AwaitingSession:    true,
+		ActiveBeforeResume: []string{oldID},
+		Started:            time.Now().Unix(),
+	}
+	if err := a.writeManaged(record); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := a.projectHandoffSource(project)
+	if err != nil || len(plan.Managed) != 1 || plan.Managed[0].SessionID != selectedID || len(plan.Awaiting) != 0 || len(plan.Unmanaged) != 1 {
+		t.Fatal("interactive resume was not resolved safely", plan, err)
+	}
+	handoff, err := a.planSelectedProjectHandoff(project, "work", map[string]bool{selectedID: true})
+	if err != nil || len(handoff.Managed) != 1 || handoff.Managed[0].SessionID != selectedID || len(handoff.Unmanaged) != 0 {
+		t.Fatal("resolved resume was not prepared for automatic handoff", handoff, err)
+	}
+	var persisted managedCodex
+	if err = readJSON(a.managedPath(os.Getpid()), &persisted); err != nil {
+		t.Fatal(err)
+	}
+	if persisted.SessionID != selectedID || persisted.SessionPath != selectedPath || persisted.AwaitingSession || len(persisted.ActiveBeforeResume) != 0 {
+		t.Fatal("resolved session was not persisted", persisted)
+	}
+}
+
+func TestInteractiveResumeKeepsAmbiguousWritersAwaitingIdentification(t *testing.T) {
+	a := fixture(t)
+	ready(t, a, "work")
+	project := t.TempDir()
+	firstID := "26262626-2626-4626-8626-262626262626"
+	secondID := "27272727-2727-4727-8727-272727272727"
+	writeTestSession(t, a.DefaultHome, "2026/09/17", firstID, project, "first active conversation")
+	writeTestSession(t, a.DefaultHome, "2026/09/18", secondID, project, "second active conversation")
+	a.SessionActive = func(home, id string) (bool, error) {
+		return home == a.DefaultHome && (id == firstID || id == secondID), nil
+	}
+	record := managedCodex{SupervisorPID: os.Getpid(), ChildPID: os.Getpid(), Account: "default", Project: project, CWD: project, AwaitingSession: true, Started: time.Now().Unix()}
+	if err := a.writeManaged(record); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := a.projectHandoffSource(project)
+	if err != nil || len(plan.Managed) != 1 || plan.Managed[0].SessionID != "" || len(plan.Awaiting) != 2 || len(plan.Unmanaged) != 0 {
+		t.Fatal("ambiguous resume was incorrectly classified", plan, err)
+	}
+	p := Panel{Theme: 0, HandoffSelected: map[string]bool{}}
+	p.useHandoffPlan(plan)
+	lines, _ := p.sessionLines(a)
+	view := stripANSI(strings.Join(lines, "\n"))
+	if !strings.Contains(view, "supervised · awaiting identification") || strings.Contains(view, "open outside XSwap") {
+		t.Fatalf("ambiguous supervised sessions had the wrong status:\n%s", view)
+	}
+	if _, err = a.planSelectedProjectHandoff(project, "work", map[string]bool{firstID: true}); err == nil || !strings.Contains(err.Error(), "identity is still ambiguous") {
+		t.Fatal("handoff guessed an ambiguous supervised session", err)
 	}
 }
 
@@ -300,28 +378,109 @@ func TestProjectHandoffRejectsOpenDestinationCopy(t *testing.T) {
 	}
 }
 
-func TestProjectHandoffRejectsDivergenceBeforeChangingProjectAccount(t *testing.T) {
+func divergentSession(t *testing.T, a *App, project, id string) (string, string) {
+	t.Helper()
+	defaultPath := writeTestSession(t, a.DefaultHome, "2026/09/18", id, project, "start")
+	session, err := readSession(defaultPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workPath, _, err := a.copySession("default", "work", session)
+	if err != nil {
+		t.Fatal(err)
+	}
+	appendSessionEvent(t, defaultPath, "continued in default")
+	appendSessionEvent(t, workPath, "continued in work")
+	return defaultPath, workPath
+}
+
+func TestProjectHandoffListsDivergenceAndAllowsOtherSelections(t *testing.T) {
+	a := fixture(t)
+	ready(t, a, "work")
+	project := t.TempDir()
+	id := "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+	divergentSession(t, a, project, id)
+	safeID := "edededed-eded-4ded-8ded-edededededed"
+	writeTestSession(t, a.DefaultHome, "2026/09/19", safeID, project, "safe conversation")
+	plan, err := a.projectHandoffSource(project)
+	if err != nil || len(plan.Sessions) != 2 || len(plan.Conflicts) != 1 || plan.Conflicts[0].ID != id {
+		t.Fatal("divergent conversation blocked the picker", plan, err)
+	}
+	if _, err = a.planProjectHandoff(project, "work"); err == nil || !strings.Contains(err.Error(), "diverged") {
+		t.Fatal("noninteractive handoff accepted an unresolved divergence", err)
+	}
+	filtered, err := a.planResolvedProjectHandoff(project, "work", map[string]bool{safeID: true}, nil)
+	if err != nil || len(filtered.Sessions) != 1 || filtered.Sessions[0].ID != safeID || len(filtered.Conflicts) != 0 {
+		t.Fatal("deselecting the conflict did not preserve compatible work", filtered, err)
+	}
+}
+
+func TestProjectHandoffResolvesEitherDivergentSourceAndArchivesDestination(t *testing.T) {
+	for _, test := range []struct{ source, target string }{{"default", "work"}, {"work", "default"}} {
+		t.Run(test.source+"_to_"+test.target, func(t *testing.T) {
+			a := fixture(t)
+			ready(t, a, "work")
+			a.SessionIndexer = func(string, string) error { return nil }
+			project := t.TempDir()
+			id := "dcdcdcdc-dcdc-4dcd-8dcd-dcdcdcdcdcdc"
+			defaultPath, workPath := divergentSession(t, a, project, id)
+			paths := map[string]string{"default": defaultPath, "work": workPath}
+			kept, err := os.ReadFile(paths[test.source])
+			if err != nil {
+				t.Fatal(err)
+			}
+			discarded, err := os.ReadFile(paths[test.target])
+			if err != nil {
+				t.Fatal(err)
+			}
+			plan, err := a.planResolvedProjectHandoff(project, test.target, map[string]bool{id: true}, map[string]string{id: test.source})
+			if err != nil || plan.Resolutions[id] != test.source {
+				t.Fatal(plan, err)
+			}
+			result, err := a.requestProjectHandoff(plan)
+			if err != nil || len(result.Archives) != 1 || result.Copied != 1 {
+				t.Fatal(result, err)
+			}
+			current, err := os.ReadFile(paths[test.target])
+			if err != nil || !bytes.Equal(current, kept) {
+				t.Fatal("destination did not receive the explicitly selected history", err)
+			}
+			archives, err := filepath.Glob(filepath.Join(a.Root, "session-conflicts", "*", test.target, "*.jsonl"))
+			if err != nil || len(archives) != 1 {
+				t.Fatal("discarded destination history was not archived", archives, err)
+			}
+			archived, err := os.ReadFile(archives[0])
+			if err != nil || !bytes.Equal(archived, discarded) {
+				t.Fatal("archive did not preserve the discarded history", err)
+			}
+		})
+	}
+}
+
+func TestProjectHandoffKeepsConflictUntouchedWhenArchiveFails(t *testing.T) {
 	a := fixture(t)
 	ready(t, a, "work")
 	a.SessionIndexer = func(string, string) error { return nil }
 	project := t.TempDir()
-	id := "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
-	sourcePath := writeTestSession(t, a.DefaultHome, "2026/09/18", id, project, "start")
-	session, err := readSession(sourcePath)
+	id := "dbdbdbdb-dbdb-4bdb-8bdb-dbdbdbdbdbdb"
+	_, workPath := divergentSession(t, a, project, id)
+	before, err := os.ReadFile(workPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	destination, _, err := a.copySession("default", "work", session)
+	if err = atomicWrite(filepath.Join(a.Root, "session-conflicts"), []byte("blocked")); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := a.planResolvedProjectHandoff(project, "work", map[string]bool{id: true}, map[string]string{id: "default"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	appendSessionEvent(t, sourcePath, "continued in default")
-	appendSessionEvent(t, destination, "continued in work")
-	if _, err = a.planProjectHandoff(project, "work"); err == nil || !strings.Contains(err.Error(), "diverged") {
-		t.Fatal("handoff accepted divergent histories", err)
+	if _, err = a.requestProjectHandoff(plan); err == nil || !strings.Contains(err.Error(), "not a directory") {
+		t.Fatal("handoff continued after archive failure", err)
 	}
-	if selected, selectionErr := a.accountForDirectory(project); selectionErr != nil || selected != "default" {
-		t.Fatal("failed handoff changed project account", selected, selectionErr)
+	after, readErr := os.ReadFile(workPath)
+	if readErr != nil || !bytes.Equal(after, before) {
+		t.Fatal("archive failure changed the destination history", readErr)
 	}
 	if exists(filepath.Join(project, projectAccountFile)) {
 		t.Fatal("failed handoff created a project account pin")
@@ -417,9 +576,63 @@ func TestProjectSwitchPanelExplainsConsequencesBeforeAction(t *testing.T) {
 		}
 	}
 	action, err := p.key(a, names, "enter")
-	actionProject, target, selected, parseErr := parseHandoffAction(action)
+	actionProject, target, selected, resolutions, parseErr := parseHandoffAction(action)
 	if err != nil || parseErr != nil || actionProject != project || target != "work" || !selected["66666666-6666-4666-8666-666666666666"] {
 		t.Fatal(action, err)
+	}
+	if len(resolutions) != 0 {
+		t.Fatal("unexpected conflict resolutions", resolutions)
+	}
+}
+
+func TestPanelRequiresExplicitSourceForDivergentConversation(t *testing.T) {
+	a := fixture(t)
+	ready(t, a, "work")
+	project := t.TempDir()
+	id := "cececece-cece-4cec-8cec-cececececece"
+	divergentSession(t, a, project, id)
+	plan, err := a.projectHandoffSource(project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := Panel{Mode: "session-select", Records: map[string]Record{}, Width: 100, Height: 30}
+	p.useHandoffPlan(plan)
+	names := a.names()
+	settings, _ := a.settings()
+	view := stripANSI(p.render(a, names, settings, time.Now()))
+	if !strings.Contains(view, "diverged across") || !strings.Contains(view, "source required") {
+		t.Fatalf("session picker did not explain the conflict:\n%s", view)
+	}
+	if _, err = p.key(a, names, "enter"); err != nil || p.Mode != "conflict-source" {
+		t.Fatal("selected conflict did not open source selection", p.Mode, err)
+	}
+	if _, err = p.key(a, names, "esc"); err != nil || p.Mode != "session-select" {
+		t.Fatal("conflict source selection did not return to sessions", p.Mode, err)
+	}
+	if len(p.HandoffResolutions) != 0 {
+		t.Fatal("cancelling source selection retained a resolution", p.HandoffResolutions)
+	}
+	p.key(a, names, "enter")
+	copies := p.HandoffConflicts[id]
+	chosen := copies[p.Cursor].Account
+	if _, err = p.key(a, names, "enter"); err != nil || p.Mode != "project-switch" || p.HandoffResolutions[id] != chosen {
+		t.Fatal("source choice did not advance to destination", p.Mode, p.HandoffResolutions, err)
+	}
+	target := names[p.Cursor]
+	if target == chosen {
+		t.Fatal("destination defaulted to the selected source", target)
+	}
+	if _, err = p.key(a, names, "enter"); err != nil || p.Mode != "confirm-project-switch" {
+		t.Fatal("resolved conflict did not reach final review", p.Mode, err)
+	}
+	view = stripANSI(p.render(a, names, settings, time.Now()))
+	if !strings.Contains(view, "1 divergent destination copy will be archived") || !strings.Contains(view, "session-conflicts") {
+		t.Fatalf("final review omitted the conflict archive consequence:\n%s", view)
+	}
+	action, err := p.key(a, names, "enter")
+	_, parsedTarget, selected, resolutions, parseErr := parseHandoffAction(action)
+	if err != nil || parseErr != nil || parsedTarget != target || !selected[id] || resolutions[id] != chosen {
+		t.Fatal("handoff action lost the explicit source", action, resolutions, err, parseErr)
 	}
 }
 

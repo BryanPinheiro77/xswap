@@ -60,9 +60,16 @@ lets the original wrapper fast-forward and resume the matching conversation in
 the same terminal and working directory. The coordinator performs a final sync.
 Before confirmation, XSwap probes Codex's per-thread writer locks. A held lock
 without a matching live XSwap supervisor identifies an open unmanaged
-conversation; the handoff is blocked and the panel names it so the user can
-close it and reopen it through `codex resume`. This prevents the source and
-destination histories from accepting new messages independently.
+conversation. The panel names it, requires explicit confirmation, copies a safe
+snapshot, and leaves it for manual resume; the user must close the source before
+sending another message in the destination copy.
+
+For `codex resume` without an explicit UUID, the supervisor records the active
+writer locks before launching Codex. The planner associates and persists a
+single newly active conversation. Multiple possible matches remain supervised
+but unidentified, are labeled as awaiting identification, and cannot enter a
+handoff until the association becomes unambiguous. This prevents automatic
+restart from guessing between active histories.
 
 The panel derives its home-screen project picker only from working directories
 stored in Codex session metadata across registered profiles. It resolves Git
@@ -71,7 +78,12 @@ orders projects by recent session activity. Opening the panel inside a project
 skips this discovery step and opens that project's conversations directly.
 Conversation IDs copied between profiles are deduplicated; the longest compatible
 history is used, active managed copies take precedence when safe, and divergent
-copies stop the handoff. A single confirmation can therefore consolidate
+copies become per-conversation conflicts. The panel can omit a conflict or
+requires the user to choose its source account before destination selection.
+If the destination has a different copy, XSwap validates and moves it into a
+private `session-conflicts` archive before copying the selected history. An
+archive failure leaves the destination in place, and a copy failure restores
+the archived file. Other account copies remain untouched. A single confirmation can therefore consolidate
 selected conversations from multiple source accounts into one destination.
 
 Repository and directory scopes use `.xswap-account`. Git repositories receive

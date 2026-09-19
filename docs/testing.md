@@ -16,7 +16,7 @@ call GitHub, or update the contributor's installed executable.
 | Installation | Unix links and Windows wrapper creation, repair, account routing, PATH lifecycle, and original-command restoration | Unrelated commands preserved; missing original CLI and foreign wrappers rejected |
 | Login | Simulated browser/device invocation inside a named temporary profile | Failed login reported; original account and selection preserved |
 | Execution | Arguments and explicit account homes retained | Explicit `CODEX_HOME` takes priority only for the Codex wrapper |
-| Projects | Nearest account pin, global fallback, full project conversation transfer, idempotent copy, and panel confirmation | Missing/disabled accounts, ambiguous sessions, conflicting destinations, symlinks, traversal, and failed indexing |
+| Projects | Nearest account pin, global fallback, full project conversation transfer, interactive-resume writer association, idempotent copy, explicit divergence resolution with either source, private conflict archival, and panel confirmation | Missing/disabled accounts, ambiguous supervised sessions, unresolved or cancelled divergence, archive failure, active conflicting destinations, symlinks, traversal, and failed indexing |
 | Auto-switch | Lowest eligible quota wins; committed selection | Disabled accounts, cooldown, stale/error/expired quotas, API keys, insufficient improvement, monitor off, changed active selection |
 | Monitor | Background operation and clean stop | Duplicate monitor exits without taking over |
 | Quota protocol | Handshake, notifications, account and quota responses | Cancellation terminates and waits for the server process |

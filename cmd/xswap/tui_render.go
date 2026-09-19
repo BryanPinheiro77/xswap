@@ -13,7 +13,7 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 		rows[0] = "Resize the terminal to at least 50×20. Press q to quit."
 		return renderRows(rows, p.Width)
 	}
-	heading := map[string]string{"home": "xswap", "watch": "watching all accounts", "auto": "auto-switch view", "switch": "select account", "project-select": "select project", "session-select": "select sessions to continue", "project-switch": "select destination account", "rename": "select account to rename", "rename-input": "rename account", "disable": "disable / enable account", "remove": "remove account", "confirm": "confirm removal", "confirm-update": "confirm update", "confirm-project-switch": "review session continuation"}[p.Mode]
+	heading := map[string]string{"home": "xswap", "watch": "watching all accounts", "auto": "auto-switch view", "switch": "select account", "project-select": "select project", "session-select": "select sessions to continue", "conflict-source": "resolve divergent session", "project-switch": "select destination account", "rename": "select account to rename", "rename-input": "rename account", "disable": "disable / enable account", "remove": "remove account", "confirm": "confirm removal", "confirm-update": "confirm update", "confirm-project-switch": "review session continuation"}[p.Mode]
 	if p.Mode == "home" {
 		heading += " " + clean(version)
 	}
@@ -52,6 +52,9 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 	if p.Mode == "session-select" {
 		lines, chosen = p.sessionLines(a)
 	}
+	if p.Mode == "conflict-source" {
+		lines, chosen = p.conflictSourceLines(a)
+	}
 	if p.Mode == "auto" {
 		lines = p.autoLines(a, s, now)
 	}
@@ -85,6 +88,16 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 		lines = append(lines,
 			muted+fmt.Sprintf("  Restart and resume %d currently managed Codex session(s).", p.HandoffManaged)+reset,
 			scope, "", accent(p.Theme)+"  enter / y Confirm continuation   esc Back"+reset)
+		if p.HandoffArchives > 0 {
+			copies := "copy"
+			if p.HandoffArchives > 1 {
+				copies = "copies"
+			}
+			warning := fmt.Sprintf("  %d divergent destination %s will be archived before replacement.", p.HandoffArchives, copies)
+			lines = append(lines[:len(lines)-2], "\x1b[33m"+warning+reset,
+				muted+"  Archives stay private under ~/.codex-swap/session-conflicts."+reset,
+				lines[len(lines)-2], lines[len(lines)-1])
+		}
 		manual := p.selectedUnmanagedSessions()
 		if len(manual) > 0 {
 			warning := fmt.Sprintf("  %d open session(s) require manual resume.", len(manual))
@@ -101,7 +114,7 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 		menuItems := p.menu()
 		available = max(1, p.Height-len(menuItems)-11)
 	}
-	if p.Mode == "switch" || p.Mode == "project-select" || p.Mode == "session-select" || p.Mode == "project-switch" || p.Mode == "disable" || p.Mode == "remove" {
+	if p.Mode == "switch" || p.Mode == "project-select" || p.Mode == "session-select" || p.Mode == "conflict-source" || p.Mode == "project-switch" || p.Mode == "disable" || p.Mode == "remove" {
 		if chosen < p.Offset || chosen >= p.Offset+available {
 			p.Offset = chosen
 		}
@@ -137,6 +150,9 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 	}
 	if p.Mode == "session-select" {
 		footer = "  space Toggle   a Select / unselect all   enter Continue   esc Back"
+	}
+	if p.Mode == "conflict-source" {
+		footer = "  enter Keep this account copy   esc Back   q Quit"
 	}
 	if p.Mode == "project-select" {
 		footer = "  enter Select project   esc Back   q Quit"

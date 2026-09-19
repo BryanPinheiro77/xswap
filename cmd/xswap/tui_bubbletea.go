@@ -135,11 +135,11 @@ func (a *App) runPanelAction(action string, input io.Reader, output io.Writer) p
 			result.Message = "Removed " + name + "."
 		}
 	case strings.HasPrefix(action, "project-handoff:"):
-		project, target, selected, err := parseHandoffAction(action)
+		project, target, selected, resolutions, err := parseHandoffAction(action)
 		_, _ = fmt.Fprintln(output, "Switching the project account and transferring its conversations…")
 		if err == nil {
 			var plan projectHandoffPlan
-			plan, err = a.planSelectedProjectHandoff(project, target, selected)
+			plan, err = a.planResolvedProjectHandoff(project, target, selected, resolutions)
 			if err == nil {
 				var handoff projectHandoffResult
 				handoff, err = a.requestProjectHandoff(plan)
@@ -249,6 +249,8 @@ func (m *panelModel) clampCursor() {
 		m.panel.Cursor = min(m.panel.Cursor, len(m.panel.HandoffProjects)-1)
 	} else if m.panel.Mode == "session-select" {
 		m.panel.Cursor = min(m.panel.Cursor, len(m.panel.HandoffSessions)-1)
+	} else if m.panel.Mode == "conflict-source" {
+		m.panel.Cursor = min(m.panel.Cursor, len(m.panel.HandoffConflicts[m.panel.HandoffConflictID])-1)
 	} else {
 		m.panel.Cursor = min(m.panel.Cursor, len(m.names)-1)
 	}

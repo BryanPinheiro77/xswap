@@ -104,15 +104,28 @@ not scan every directory on the computer. Each row counts unique conversations
 across every registered account. After choosing a project, the session picker
 shows that complete deduplicated list and identifies each conversation's source
 account. Every conversation is selected initially. Use `Space` to toggle one conversation, `a`
-to select or clear all, and `Enter` to choose the destination account. The final review shows
+to select or clear all. If a conversation changed independently in multiple
+accounts, the picker marks it as diverged. Deselect it to continue with the
+other conversations, or press `Enter` and explicitly choose which account's
+history to keep. Then choose the destination account. The final review shows
 the selected conversations, how many managed sessions will restart, and how
-many open sessions require manual resume. An open source conversation started
+many open sessions require manual resume. When resolving a divergence would
+replace a different destination history, XSwap first moves that history to a
+private archive under `~/.codex-swap/session-conflicts` and reports its path.
+An open source conversation started
 outside the XSwap wrapper can still be copied after confirmation. XSwap cannot
 restart that process, so close the old Codex process before sending another
 message and run `codex resume` in the project to continue with the destination
 account. XSwap refuses the transfer if another active copy, including the
 destination copy, could be overwritten. Other projects and unselected
 conversations are left alone.
+
+When `codex resume` opens Codex's own conversation picker, XSwap tracks which
+writer locks were active before the picker started. A single newly active
+conversation is attached to its supervisor and can restart automatically during
+a later handoff. If several conversations become possible matches, the panel
+shows **supervised · awaiting identification** and refuses to guess; reopen the
+conversation with an explicit session ID or close the other active candidates.
 
 Project selection is stored in `.xswap-account` at the repository root; the
 nearest file wins in nested directories. XSwap adds it to the repository's

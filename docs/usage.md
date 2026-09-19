@@ -54,9 +54,19 @@ Choose **Continue sessions with another account…** in the panel, or run
    label each source account, and select all initially;
 4. use `Space` to toggle one conversation, `a` to select or clear all, and
    `Enter` to continue;
-5. select the destination account; and
-6. review the project, source, destination, selected conversations, and number
+5. for each selected conversation marked as diverged, explicitly choose which
+   account copy is the source of truth;
+6. select the destination account; and
+7. review the project, source, destination, selected conversations, any
+   destination copies that will be archived, and number
    of open managed sessions that will restart, then confirm with `Enter` or `y`.
+
+A divergent conversation never blocks compatible conversations in the same
+project or Home scope. Deselect the conflict to leave all its copies untouched.
+If it stays selected, XSwap will not continue until a source account is chosen.
+When the destination contains a different history, XSwap archives that file
+privately under `~/.codex-swap/session-conflicts` before copying the chosen
+source. If archival fails, the destination remains unchanged.
 
 If a selected source conversation is currently open outside XSwap supervision,
 the review names it and marks it for manual resume. After confirmation XSwap
@@ -82,13 +92,23 @@ destination account. A home-scoped handoff changes the global selection for
 future processes in unpinned directories. Other projects and terminals are
 unchanged. Conversations
 remain in the source profile and append-only transfers can safely return to an
-earlier account. If both copies changed independently, XSwap reports a divergence
-instead of overwriting either history. XSwap
+earlier account. If both copies changed independently, the panel requires an
+explicit source choice and archives a replaced destination copy instead of
+silently overwriting either history. The noninteractive `project switch`
+command refuses unresolved divergences; use the panel to resolve them. XSwap
 does not copy authentication, config, cache, database, or unrelated sessions.
 Open sessions started outside the XSwap wrapper cannot be restarted automatically.
 XSwap detects their active writer locks, labels them for manual resume, and
 requires the old process to be closed before the destination copy is used. Once
 resumed through the wrapper, future handoffs can restart them automatically.
+
+An interactive `codex resume` command does not reveal the selected conversation
+ID to its wrapper before Codex opens the picker. XSwap records the project's
+active writer locks before launch and attaches the one newly active conversation
+to that supervisor. If more than one conversation could match, the picker labels
+them **supervised · awaiting identification** and the handoff stops instead of
+guessing. Reopen the intended conversation with an explicit session ID, or close
+the other active candidates, to make the association unambiguous.
 
 The noninteractive `xswap project switch NAME` command selects every conversation
 in the project because it has no interactive session picker.
