@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -21,6 +22,7 @@ type App struct {
 	CommandRunner                             func(context.Context, string, ...string) error
 	SessionIndexer                            func(string, string) error
 	SessionActive                             func(string, string) (bool, error)
+	PanelActionRunner                         func(string, io.Reader, io.Writer) panelActionResult
 }
 type AutoConfig struct {
 	Enabled   bool `json:"enabled"`

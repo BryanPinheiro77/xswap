@@ -8,7 +8,7 @@ used by newly launched Codex processes.
 
 ## Features
 
-- English account menu with thin quota bars and reset timing.
+- Responsive Bubble Tea terminal panel with thin quota bars and reset timing.
 - Browser or device-code login in a separate home for each account.
 - Manual selection and parallel runs without copying tokens between accounts.
 - Project-local account selection and confirmed conversation handoff between accounts.
@@ -92,7 +92,9 @@ xswap run default -- --version
 No prior login or logout is needed: `add` logs in directly inside a new profile.
 The menu offers global and project switching, watching, auto-switch status,
 adding, enable/disable, removal, theme, and quit. Arrow keys navigate; Enter
-selects; Esc goes back.
+selects; Esc goes back. Interactive login, update, removal, and continuation
+actions temporarily receive the terminal and return to the same panel when
+they finish.
 
 **Switch account…** changes the global default for new Codex processes and does
 not move conversations. Inside a project, **Continue sessions with another

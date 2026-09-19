@@ -13,6 +13,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	tea "charm.land/bubbletea/v2"
 )
 
 func fixture(t *testing.T) *App {
@@ -314,9 +316,18 @@ func TestThinBarsAndQuotaBuckets(t *testing.T) {
 	if resetLabel(pointer(now.Unix()-1), now) != "resets now" {
 		t.Fatal("reset label")
 	}
-	keys, remaining := parseKeys([]byte("\x1b[A\x1b[Bw\r"), false)
-	if len(remaining) != 0 || !reflect.DeepEqual(keys, []string{"up", "down", "w", "enter"}) {
-		t.Fatal(keys, remaining)
+	keyMessages := []tea.KeyPressMsg{
+		tea.KeyPressMsg(tea.Key{Code: tea.KeyUp}),
+		tea.KeyPressMsg(tea.Key{Code: tea.KeyDown}),
+		tea.KeyPressMsg(tea.Key{Code: 'w', Text: "w"}),
+		tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}),
+	}
+	keys := make([]string, 0, len(keyMessages))
+	for _, message := range keyMessages {
+		keys = append(keys, bubbleKey(message))
+	}
+	if !reflect.DeepEqual(keys, []string{"up", "down", "w", "enter"}) {
+		t.Fatal(keys)
 	}
 }
 

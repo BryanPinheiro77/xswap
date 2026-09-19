@@ -5,6 +5,27 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ## Unreleased
 
+## v0.5.0 — 2026-09-19
+
+### Changed
+
+- Replace the custom raw-terminal event loop with Bubble Tea v2 while keeping
+  the existing panel layout, account storage, quota logic, and session handoff
+  behavior.
+- Run login, update, removal, and session continuation through Bubble Tea's
+  terminal handoff so interactive child processes receive input and the panel
+  resumes without restarting its event loop.
+- Use Bubble Tea messages for keyboard input, Unicode account labels, terminal
+  resize events, periodic quota refreshes, and release checks.
+
+### Fixed
+
+- Prevent panel input from consuming the first key intended for a login or
+  action prompt, and restore the alternate screen before and after interactive
+  child actions.
+- Allow `q` in account display names while retaining `q` as a navigation-screen
+  shortcut.
+
 ## v0.4.2 — 2026-09-18
 
 ### Fixed
