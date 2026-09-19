@@ -32,13 +32,20 @@ type handoffRequest struct {
 }
 
 type projectHandoffPlan struct {
-	Project   string
-	Sources   []string
-	Target    string
-	Sessions  []codexSession
-	Managed   []managedCodex
-	Awaiting  []codexSession
-	Unmanaged []codexSession
+	Project     string
+	Sources     []string
+	Target      string
+	Sessions    []codexSession
+	Managed     []managedCodex
+	Awaiting    []codexSession
+	Unmanaged   []codexSession
+	Conflicts   []sessionConflict
+	Resolutions map[string]string
+}
+
+type sessionConflict struct {
+	ID     string
+	Copies []codexSession
 }
 
 type sessionProject struct {
@@ -58,8 +65,11 @@ type projectHandoffResult struct {
 	Restarted    int
 	NotRestarted int
 	Manual       []codexSession
+	Archives     []string
 	Global       bool
 }
+
+var errSessionDiverged = errors.New("session histories diverged")
 
 func (a *App) managedPath(pid int) string {
 	return filepath.Join(a.Root, "running", strconv.Itoa(pid)+".json")
@@ -366,7 +376,7 @@ func compatibleSessionCopy(candidates []codexSession) (codexSession, error) {
 			return codexSession{}, err
 		}
 		if !chosenPrefix && !candidatePrefix {
-			return codexSession{}, fmt.Errorf("session %s has diverged between accounts", chosen.ID)
+			return codexSession{}, fmt.Errorf("%w: session %s has diverged between accounts", errSessionDiverged, chosen.ID)
 		}
 		if chosenPrefix && (!candidatePrefix || candidate.Updated.After(chosen.Updated)) {
 			chosen = candidate
@@ -526,16 +536,35 @@ func (a *App) projectHandoffSource(directory string) (projectHandoffPlan, error)
 		}
 	}
 	sessions := make([]codexSession, 0, len(variants))
+	conflicts := []sessionConflict{}
 	for id, candidates := range variants {
 		managed := managedBySession[id]
 		if len(managed) > 1 {
 			return projectHandoffPlan{}, fmt.Errorf("conversation %s is open in multiple accounts", id)
 		}
 		chosen, compatibleErr := compatibleSessionCopy(candidates)
+		diverged := false
 		if compatibleErr != nil {
-			return projectHandoffPlan{}, compatibleErr
+			if !errors.Is(compatibleErr, errSessionDiverged) {
+				return projectHandoffPlan{}, compatibleErr
+			}
+			diverged = true
+			chosen = candidates[0]
+			for _, candidate := range candidates[1:] {
+				if candidate.Updated.After(chosen.Updated) {
+					chosen = candidate
+				}
+			}
+			copies := append([]codexSession(nil), candidates...)
+			sort.Slice(copies, func(i, j int) bool {
+				if copies[i].Updated.Equal(copies[j].Updated) {
+					return copies[i].Account < copies[j].Account
+				}
+				return copies[i].Updated.After(copies[j].Updated)
+			})
+			conflicts = append(conflicts, sessionConflict{ID: id, Copies: copies})
 		}
-		if len(managed) == 1 {
+		if len(managed) == 1 && !diverged {
 			for _, candidate := range candidates {
 				if candidate.Account == managed[0].Account {
 					managedIsCurrent, prefixErr := fileIsPrefix(chosen.Path, candidate.Path)
@@ -553,6 +582,7 @@ func (a *App) projectHandoffSource(directory string) (projectHandoffPlan, error)
 		sessions = append(sessions, chosen)
 	}
 	sort.Slice(sessions, func(i, j int) bool { return sessions[i].Updated.After(sessions[j].Updated) })
+	sort.Slice(conflicts, func(i, j int) bool { return conflicts[i].ID < conflicts[j].ID })
 	unmanaged := []codexSession{}
 	for _, candidates := range variants {
 		for _, session := range candidates {
@@ -578,7 +608,7 @@ func (a *App) projectHandoffSource(directory string) (projectHandoffPlan, error)
 		awaiting = append(awaiting, session)
 	}
 	sort.Slice(awaiting, func(i, j int) bool { return awaiting[i].Updated.After(awaiting[j].Updated) })
-	return projectHandoffPlan{Project: project, Sources: sessionAccounts(sessions), Sessions: sessions, Managed: records, Awaiting: awaiting, Unmanaged: unmanaged}, nil
+	return projectHandoffPlan{Project: project, Sources: sessionAccounts(sessions), Sessions: sessions, Managed: records, Awaiting: awaiting, Unmanaged: unmanaged, Conflicts: conflicts, Resolutions: map[string]string{}}, nil
 }
 
 func sessionAccounts(sessions []codexSession) []string {
@@ -668,6 +698,13 @@ func filterHandoffPlan(plan projectHandoffPlan, selected map[string]bool) (proje
 		}
 	}
 	plan.Awaiting = awaiting
+	conflicts := []sessionConflict{}
+	for _, conflict := range plan.Conflicts {
+		if selected[conflict.ID] {
+			conflicts = append(conflicts, conflict)
+		}
+	}
+	plan.Conflicts = conflicts
 	unmanaged := []codexSession{}
 	for _, session := range plan.Unmanaged {
 		if selected[session.ID] {
@@ -676,6 +713,56 @@ func filterHandoffPlan(plan projectHandoffPlan, selected map[string]bool) (proje
 	}
 	plan.Unmanaged = unmanaged
 	return plan, nil
+}
+
+func resolveSelectedConflicts(plan projectHandoffPlan, selected map[string]bool, resolutions map[string]string) (projectHandoffPlan, error) {
+	plan.Resolutions = map[string]string{}
+	for _, conflict := range plan.Conflicts {
+		if selected != nil && !selected[conflict.ID] {
+			continue
+		}
+		source := resolutions[conflict.ID]
+		if source == "" {
+			return projectHandoffPlan{}, fmt.Errorf("conversation %s has diverged between accounts; choose which account copy to keep or deselect it", conflict.ID)
+		}
+		if err := validate(source); err != nil && source != "default" {
+			return projectHandoffPlan{}, errors.New("divergent session source account is invalid")
+		}
+		chosen := codexSession{}
+		for _, candidate := range conflict.Copies {
+			if candidate.Account == source {
+				chosen = candidate
+				break
+			}
+		}
+		if chosen.ID == "" {
+			return projectHandoffPlan{}, fmt.Errorf("conversation %s has no copy in account %s", conflict.ID, source)
+		}
+		for index := range plan.Sessions {
+			if plan.Sessions[index].ID == conflict.ID {
+				plan.Sessions[index] = chosen
+				break
+			}
+		}
+		plan.Resolutions[conflict.ID] = source
+	}
+	plan.Sources = sessionAccounts(plan.Sessions)
+	return plan, nil
+}
+
+func conflictingManagedCopy(plan projectHandoffPlan) error {
+	for _, conflict := range plan.Conflicts {
+		source := plan.Resolutions[conflict.ID]
+		if source == "" {
+			continue
+		}
+		for _, record := range plan.Managed {
+			if record.SessionID == conflict.ID && record.Account != source {
+				return fmt.Errorf("another copy of conversation %s is running with account %s; close it before choosing %s as the source", conflict.ID, record.Account, source)
+			}
+		}
+	}
+	return nil
 }
 
 func awaitingIdentificationError(project string, sessions []codexSession) error {
@@ -718,7 +805,7 @@ func unmanagedConflictError(project string, sessions []codexSession) error {
 	return fmt.Errorf("another copy of the selected conversation is open: %s; close it before continuing", strings.Join(titles, "; "))
 }
 
-func (a *App) planSelectedProjectHandoff(directory, target string, selected map[string]bool) (projectHandoffPlan, error) {
+func (a *App) planResolvedProjectHandoff(directory, target string, selected map[string]bool, resolutions map[string]string) (projectHandoffPlan, error) {
 	if _, err := a.require(target); err != nil {
 		return projectHandoffPlan{}, err
 	}
@@ -734,6 +821,13 @@ func (a *App) planSelectedProjectHandoff(directory, target string, selected map[
 		return projectHandoffPlan{}, err
 	}
 	plan.Target = target
+	plan, err = resolveSelectedConflicts(plan, selected, resolutions)
+	if err != nil {
+		return projectHandoffPlan{}, err
+	}
+	if err = conflictingManagedCopy(plan); err != nil {
+		return projectHandoffPlan{}, err
+	}
 	plan, err = filterHandoffPlan(plan, selected)
 	if err != nil {
 		return projectHandoffPlan{}, err
@@ -774,8 +868,63 @@ func (a *App) planSelectedProjectHandoff(directory, target string, selected map[
 	return plan, nil
 }
 
+func (a *App) planSelectedProjectHandoff(directory, target string, selected map[string]bool) (projectHandoffPlan, error) {
+	return a.planResolvedProjectHandoff(directory, target, selected, nil)
+}
+
 func (a *App) planProjectHandoff(directory, target string) (projectHandoffPlan, error) {
-	return a.planSelectedProjectHandoff(directory, target, nil)
+	return a.planResolvedProjectHandoff(directory, target, nil, nil)
+}
+
+func (a *App) archiveConflictCopy(session codexSession) (string, error) {
+	home, err := a.require(session.Account)
+	if err != nil {
+		return "", err
+	}
+	sessionsRoot := filepath.Join(home, "sessions")
+	if !pathWithin(sessionsRoot, session.Path) {
+		return "", errors.New("conflicting session path is outside its account profile")
+	}
+	verified, err := readSession(session.Path)
+	if err != nil || verified.ID != session.ID {
+		return "", errors.New("conflicting session changed or became invalid before archival")
+	}
+	directory := filepath.Join(a.Root, "session-conflicts", fmt.Sprintf("%d-%s", time.Now().UnixNano(), session.ID), session.Account)
+	if err = os.MkdirAll(directory, 0700); err != nil {
+		return "", err
+	}
+	archive := filepath.Join(directory, filepath.Base(session.Path))
+	if err = os.Rename(session.Path, archive); err != nil {
+		return "", fmt.Errorf("archive conflicting session copy: %w", err)
+	}
+	return archive, nil
+}
+
+func conflictCopyForTarget(plan projectHandoffPlan, id, target string) (codexSession, bool) {
+	if plan.Resolutions[id] == "" || plan.Resolutions[id] == target {
+		return codexSession{}, false
+	}
+	for _, conflict := range plan.Conflicts {
+		if conflict.ID != id {
+			continue
+		}
+		for _, candidate := range conflict.Copies {
+			if candidate.Account == target {
+				return candidate, true
+			}
+		}
+	}
+	return codexSession{}, false
+}
+
+func conflictArchiveCount(plan projectHandoffPlan) int {
+	count := 0
+	for _, session := range plan.Sessions {
+		if _, found := conflictCopyForTarget(plan, session.ID, plan.Target); found {
+			count++
+		}
+	}
+	return count
 }
 
 func (a *App) requestProjectHandoff(plan projectHandoffPlan) (projectHandoffResult, error) {
@@ -787,7 +936,7 @@ func (a *App) requestProjectHandoff(plan projectHandoffPlan) (projectHandoffResu
 	}
 	defer unlock()
 	selected := selectedSessionMap(plan.Sessions)
-	current, err := a.planSelectedProjectHandoff(plan.Project, plan.Target, selected)
+	current, err := a.planResolvedProjectHandoff(plan.Project, plan.Target, selected, plan.Resolutions)
 	if err != nil {
 		return projectHandoffResult{}, err
 	}
@@ -817,8 +966,23 @@ func (a *App) requestProjectHandoff(plan projectHandoffPlan) (projectHandoffResu
 		if session.Account == plan.Target {
 			continue
 		}
+		archive := ""
+		archivedCopy, hasConflict := conflictCopyForTarget(plan, session.ID, plan.Target)
+		if hasConflict {
+			archive, err = a.archiveConflictCopy(archivedCopy)
+			if err != nil {
+				return result, err
+			}
+			result.Archives = append(result.Archives, archive)
+		}
 		_, copied, copyErr := a.copySession(session.Account, plan.Target, session)
 		if copyErr != nil {
+			if archive != "" {
+				if restoreErr := os.Rename(archive, archivedCopy.Path); restoreErr != nil {
+					return result, fmt.Errorf("%v; archived destination copy remains at %s after restore failed: %w", copyErr, archive, restoreErr)
+				}
+				result.Archives = result.Archives[:len(result.Archives)-1]
+			}
 			return result, copyErr
 		}
 		changed[session.ID] = copied

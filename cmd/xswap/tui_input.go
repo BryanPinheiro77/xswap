@@ -17,6 +17,28 @@ func appendPanelInput(current, text string, limit int) string {
 	return string(runes)
 }
 
+func (p *Panel) openHandoffDestination(a *App, names []string) {
+	p.Mode = "project-switch"
+	p.Cursor = 0
+	sources := p.selectedSourceAccounts()
+	if len(sources) == 1 {
+		for index, name := range names {
+			if name != sources[0] {
+				p.Cursor = index
+				break
+			}
+		}
+	} else {
+		for index, name := range names {
+			if name == a.selected() {
+				p.Cursor = index
+				break
+			}
+		}
+	}
+	p.Offset = 0
+}
+
 func (p *Panel) key(a *App, names []string, key string) (string, error) {
 	if key == "ctrl-c" || (key == "q" && p.Mode != "rename-input") {
 		return "quit", nil
@@ -32,6 +54,13 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 		}
 		if p.Mode == "confirm-project-switch" {
 			p.Mode = "project-switch"
+			p.Offset = 0
+			return "", nil
+		}
+		if p.Mode == "conflict-source" {
+			p.Mode = "session-select"
+			p.HandoffConflictID = ""
+			p.Cursor = 0
 			p.Offset = 0
 			return "", nil
 		}
@@ -72,7 +101,7 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 	}
 	if p.Mode == "confirm-project-switch" {
 		if key == "enter" || key == "y" || key == "Y" {
-			return handoffAction(p.HandoffProject, p.Pending, p.selectedSessions()), nil
+			return handoffAction(p.HandoffProject, p.Pending, p.selectedSessions(), p.HandoffResolutions), nil
 		}
 		return "", nil
 	}
@@ -159,6 +188,8 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 			p.Cursor = min(p.Cursor+1, len(p.HandoffProjects)-1)
 		} else if p.Mode == "session-select" {
 			p.Cursor = min(p.Cursor+1, len(p.HandoffSessions)-1)
+		} else if p.Mode == "conflict-source" {
+			p.Cursor = min(p.Cursor+1, len(p.HandoffConflicts[p.HandoffConflictID])-1)
 		} else if p.Mode == "switch" || p.Mode == "project-switch" || p.Mode == "rename" || p.Mode == "disable" || p.Mode == "remove" {
 			p.Cursor = min(p.Cursor+1, len(names)-1)
 		} else {
@@ -170,6 +201,8 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 		} else if p.Mode == "project-select" {
 			p.Cursor = max(0, p.Cursor-1)
 		} else if p.Mode == "session-select" {
+			p.Cursor = max(0, p.Cursor-1)
+		} else if p.Mode == "conflict-source" {
 			p.Cursor = max(0, p.Cursor-1)
 		} else if p.Mode == "switch" || p.Mode == "project-switch" || p.Mode == "rename" || p.Mode == "disable" || p.Mode == "remove" {
 			p.Cursor = max(0, p.Cursor-1)
@@ -249,25 +282,22 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 				p.Message = "Select at least one conversation to continue."
 			} else if len(names) < 2 {
 				p.Message = "Add another account before continuing these conversations."
+			} else if p.beginConflictResolution() {
+				return "", nil
 			} else {
-				p.Mode = "project-switch"
-				p.Cursor = 0
-				if len(p.HandoffSources) == 1 {
-					for index, name := range names {
-						if name != p.HandoffSources[0] {
-							p.Cursor = index
-							break
-						}
-					}
-				} else {
-					for index, name := range names {
-						if name == a.selected() {
-							p.Cursor = index
-							break
-						}
-					}
+				p.openHandoffDestination(a, names)
+			}
+		} else if p.Mode == "conflict-source" {
+			copies := p.HandoffConflicts[p.HandoffConflictID]
+			if len(copies) == 0 {
+				p.Message = "No account copies are available for this conflict."
+				p.Mode = "session-select"
+			} else {
+				p.HandoffResolutions[p.HandoffConflictID] = copies[p.Cursor].Account
+				p.HandoffConflictID = ""
+				if !p.beginConflictResolution() {
+					p.openHandoffDestination(a, names)
 				}
-				p.Offset = 0
 			}
 		} else if p.Mode == "switch" {
 			if err := a.selectAccount(names[p.Cursor]); err != nil {
@@ -283,7 +313,7 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 				p.Offset = 0
 			}
 		} else if p.Mode == "project-switch" {
-			plan, err := a.planSelectedProjectHandoff(p.HandoffProject, names[p.Cursor], p.HandoffSelected)
+			plan, err := a.planResolvedProjectHandoff(p.HandoffProject, names[p.Cursor], p.HandoffSelected, p.HandoffResolutions)
 			if err != nil {
 				p.Message = err.Error()
 			} else {
@@ -295,6 +325,7 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 				p.HandoffProject = plan.Project
 				p.HandoffSources = plan.Sources
 				p.HandoffManaged = len(plan.Managed)
+				p.HandoffArchives = conflictArchiveCount(plan)
 				p.Mode = "confirm-project-switch"
 				p.Offset = 0
 			}

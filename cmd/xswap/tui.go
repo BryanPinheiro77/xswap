@@ -2,12 +2,14 @@ package main
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -67,6 +69,7 @@ type Panel struct {
 	Due                                   time.Time
 	Width, Height                         int
 	HandoffManaged                        int
+	HandoffArchives                       int
 	HandoffProject                        string
 	HandoffSources                        []string
 	HandoffProjects                       []sessionProject
@@ -74,25 +77,33 @@ type Panel struct {
 	HandoffSelected, HandoffRunning       map[string]bool
 	HandoffAwaiting                       map[string]bool
 	HandoffUnmanaged                      map[string]bool
+	HandoffConflicts                      map[string][]codexSession
+	HandoffResolutions                    map[string]string
+	HandoffConflictID                     string
 }
 
-func handoffAction(project, target string, sessions []codexSession) string {
+func handoffAction(project, target string, sessions []codexSession, resolutions map[string]string) string {
 	ids := make([]string, 0, len(sessions))
 	for _, session := range sessions {
 		ids = append(ids, session.ID)
 	}
 	encodedProject := base64.RawURLEncoding.EncodeToString([]byte(project))
-	return "project-handoff:" + encodedProject + ":" + target + ":" + strings.Join(ids, ",")
+	encodedResolutions := ""
+	if len(resolutions) > 0 {
+		data, _ := json.Marshal(resolutions)
+		encodedResolutions = base64.RawURLEncoding.EncodeToString(data)
+	}
+	return "project-handoff:" + encodedProject + ":" + target + ":" + strings.Join(ids, ",") + ":" + encodedResolutions
 }
 
-func parseHandoffAction(action string) (string, string, map[string]bool, error) {
-	parts := strings.SplitN(strings.TrimPrefix(action, "project-handoff:"), ":", 3)
-	if len(parts) != 3 {
-		return "", "", nil, errors.New("session handoff action is invalid")
+func parseHandoffAction(action string) (string, string, map[string]bool, map[string]string, error) {
+	parts := strings.SplitN(strings.TrimPrefix(action, "project-handoff:"), ":", 4)
+	if len(parts) < 3 {
+		return "", "", nil, nil, errors.New("session handoff action is invalid")
 	}
 	projectBytes, err := base64.RawURLEncoding.DecodeString(parts[0])
 	if err != nil || !filepath.IsAbs(string(projectBytes)) {
-		return "", "", nil, errors.New("session handoff project is invalid")
+		return "", "", nil, nil, errors.New("session handoff project is invalid")
 	}
 	selected := map[string]bool{}
 	for _, id := range strings.Split(parts[2], ",") {
@@ -100,7 +111,19 @@ func parseHandoffAction(action string) (string, string, map[string]bool, error) 
 			selected[id] = true
 		}
 	}
-	return filepath.Clean(string(projectBytes)), parts[1], selected, nil
+	resolutions := map[string]string{}
+	if len(parts) == 4 && parts[3] != "" {
+		data, decodeErr := base64.RawURLEncoding.DecodeString(parts[3])
+		if decodeErr != nil || json.Unmarshal(data, &resolutions) != nil {
+			return "", "", nil, nil, errors.New("session handoff resolutions are invalid")
+		}
+		for id, account := range resolutions {
+			if !sessionIDPattern.MatchString(id) || (account != "default" && validate(account) != nil) {
+				return "", "", nil, nil, errors.New("session handoff resolution is invalid")
+			}
+		}
+	}
+	return filepath.Clean(string(projectBytes)), parts[1], selected, resolutions, nil
 }
 
 var menuItems = []string{"Switch account…", "Continue sessions with another account…", "Watch accounts", "Auto-switch view", "Add account…", "Rename account…", "Disable / enable account…", "Remove account…", "Theme…", "Quit"}
@@ -136,6 +159,64 @@ func (p *Panel) selectedUnmanagedSessions() []codexSession {
 	return selected
 }
 
+func (p *Panel) nextUnresolvedConflict() string {
+	for _, session := range p.HandoffSessions {
+		if p.HandoffSelected[session.ID] && len(p.HandoffConflicts[session.ID]) > 0 && p.HandoffResolutions[session.ID] == "" {
+			return session.ID
+		}
+	}
+	return ""
+}
+
+func (p *Panel) beginConflictResolution() bool {
+	id := p.nextUnresolvedConflict()
+	if id == "" {
+		return false
+	}
+	p.HandoffConflictID = id
+	p.Mode = "conflict-source"
+	p.Cursor = 0
+	p.Offset = 0
+	p.Message = ""
+	return true
+}
+
+func (p *Panel) selectedSourceAccounts() []string {
+	found := map[string]bool{}
+	for _, session := range p.selectedSessions() {
+		account := session.Account
+		if resolved := p.HandoffResolutions[session.ID]; resolved != "" {
+			account = resolved
+		}
+		if account != "" {
+			found[account] = true
+		}
+	}
+	accounts := make([]string, 0, len(found))
+	for account := range found {
+		accounts = append(accounts, account)
+	}
+	sort.Strings(accounts)
+	return accounts
+}
+
+func (p *Panel) conflictSourceLines(a *App) ([]string, int) {
+	copies := p.HandoffConflicts[p.HandoffConflictID]
+	lines := []string{"", bold + "  Choose the source history to keep" + reset, muted + "  Other copies remain untouched unless the destination copy must be archived." + reset, ""}
+	chosen := len(lines)
+	for index, session := range copies {
+		if index == p.Cursor {
+			chosen = len(lines)
+		}
+		label := fmt.Sprintf("  %d  %s", index+1, clean(a.displayName(session.Account)))
+		if index == p.Cursor {
+			label = highlight + accent(p.Theme) + " ▌ " + strings.TrimSpace(label) + reset
+		}
+		lines = append(lines, label, muted+"     updated "+session.Updated.Format("Jan 02 15:04")+reset, "")
+	}
+	return lines, chosen
+}
+
 func (p *Panel) useHandoffPlan(plan projectHandoffPlan) {
 	p.HandoffProject = plan.Project
 	p.HandoffSources = plan.Sources
@@ -144,6 +225,10 @@ func (p *Panel) useHandoffPlan(plan projectHandoffPlan) {
 	p.HandoffRunning = map[string]bool{}
 	p.HandoffAwaiting = map[string]bool{}
 	p.HandoffUnmanaged = map[string]bool{}
+	p.HandoffConflicts = map[string][]codexSession{}
+	p.HandoffResolutions = map[string]string{}
+	p.HandoffConflictID = ""
+	p.HandoffArchives = 0
 	for _, session := range plan.Sessions {
 		p.HandoffSelected[session.ID] = true
 	}
@@ -157,6 +242,9 @@ func (p *Panel) useHandoffPlan(plan projectHandoffPlan) {
 	}
 	for _, session := range plan.Unmanaged {
 		p.HandoffUnmanaged[session.ID] = true
+	}
+	for _, conflict := range plan.Conflicts {
+		p.HandoffConflicts[conflict.ID] = append([]codexSession(nil), conflict.Copies...)
 	}
 }
 
@@ -257,6 +345,17 @@ func (p *Panel) sessionLines(a *App) ([]string, int) {
 			meta += "  ·  supervised · awaiting identification"
 		} else if p.HandoffUnmanaged[session.ID] {
 			meta += "  ·  open outside XSwap"
+		}
+		if copies := p.HandoffConflicts[session.ID]; len(copies) > 0 {
+			accounts := make([]string, 0, len(copies))
+			for _, copy := range copies {
+				accounts = append(accounts, a.displayName(copy.Account))
+			}
+			if source := p.HandoffResolutions[session.ID]; source != "" {
+				meta += "  ·  diverged · keep " + a.displayName(source)
+			} else {
+				meta += "  ·  diverged across " + strings.Join(accounts, ", ") + " · source required"
+			}
 		}
 		lines = append(lines, title, muted+"       "+meta+reset, "")
 	}
