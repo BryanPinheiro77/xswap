@@ -72,6 +72,7 @@ type Panel struct {
 	HandoffProjects                       []sessionProject
 	HandoffSessions                       []codexSession
 	HandoffSelected, HandoffRunning       map[string]bool
+	HandoffAwaiting                       map[string]bool
 	HandoffUnmanaged                      map[string]bool
 }
 
@@ -141,6 +142,7 @@ func (p *Panel) useHandoffPlan(plan projectHandoffPlan) {
 	p.HandoffSessions = plan.Sessions
 	p.HandoffSelected = map[string]bool{}
 	p.HandoffRunning = map[string]bool{}
+	p.HandoffAwaiting = map[string]bool{}
 	p.HandoffUnmanaged = map[string]bool{}
 	for _, session := range plan.Sessions {
 		p.HandoffSelected[session.ID] = true
@@ -149,6 +151,9 @@ func (p *Panel) useHandoffPlan(plan projectHandoffPlan) {
 		if record.SessionID != "" {
 			p.HandoffRunning[record.SessionID] = true
 		}
+	}
+	for _, session := range plan.Awaiting {
+		p.HandoffAwaiting[session.ID] = true
 	}
 	for _, session := range plan.Unmanaged {
 		p.HandoffUnmanaged[session.ID] = true
@@ -248,6 +253,8 @@ func (p *Panel) sessionLines(a *App) ([]string, int) {
 		meta := session.Updated.Format("Jan 02 15:04") + "  ·  from " + a.displayName(session.Account)
 		if p.HandoffRunning[session.ID] {
 			meta += "  ·  running"
+		} else if p.HandoffAwaiting[session.ID] {
+			meta += "  ·  supervised · awaiting identification"
 		} else if p.HandoffUnmanaged[session.ID] {
 			meta += "  ·  open outside XSwap"
 		}

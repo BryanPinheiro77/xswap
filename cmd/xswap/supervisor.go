@@ -13,14 +13,16 @@ import (
 )
 
 type managedCodex struct {
-	SupervisorPID int    `json:"supervisorPid"`
-	ChildPID      int    `json:"childPid"`
-	Account       string `json:"account"`
-	Project       string `json:"project"`
-	CWD           string `json:"cwd"`
-	SessionID     string `json:"sessionId,omitempty"`
-	SessionPath   string `json:"sessionPath,omitempty"`
-	Started       int64  `json:"started"`
+	SupervisorPID      int      `json:"supervisorPid"`
+	ChildPID           int      `json:"childPid"`
+	Account            string   `json:"account"`
+	Project            string   `json:"project"`
+	CWD                string   `json:"cwd"`
+	SessionID          string   `json:"sessionId,omitempty"`
+	SessionPath        string   `json:"sessionPath,omitempty"`
+	AwaitingSession    bool     `json:"awaitingSession,omitempty"`
+	ActiveBeforeResume []string `json:"activeBeforeResume,omitempty"`
+	Started            int64    `json:"started"`
 }
 
 type handoffRequest struct {
@@ -35,6 +37,7 @@ type projectHandoffPlan struct {
 	Target    string
 	Sessions  []codexSession
 	Managed   []managedCodex
+	Awaiting  []codexSession
 	Unmanaged []codexSession
 }
 
@@ -67,21 +70,54 @@ func (a *App) handoffPath(pid int) string {
 }
 
 func resumeSessionID(args []string) string {
+	index := resumeCommandIndex(args)
+	if index < 0 {
+		return ""
+	}
+	for _, candidate := range args[index+1:] {
+		if strings.HasPrefix(candidate, "-") {
+			continue
+		}
+		if sessionIDPattern.MatchString(candidate) {
+			return strings.ToLower(candidate)
+		}
+		break
+	}
+	return ""
+}
+
+func resumeCommandIndex(args []string) int {
 	for index, arg := range args {
 		if arg != "resume" {
 			continue
 		}
-		for _, candidate := range args[index+1:] {
-			if strings.HasPrefix(candidate, "-") {
-				continue
+		for _, earlier := range args[:index] {
+			if earlier == "exec" {
+				return -1
 			}
-			if sessionIDPattern.MatchString(candidate) {
-				return strings.ToLower(candidate)
-			}
-			break
+		}
+		return index
+	}
+	return -1
+}
+
+func (a *App) activeSessionsInProject(home, project string) ([]string, error) {
+	sessions, err := sessionsInProject(home, project)
+	if err != nil {
+		return nil, err
+	}
+	active := []string{}
+	for _, session := range sessions {
+		open, openErr := a.sessionIsOpen(home, session.ID)
+		if openErr != nil {
+			return nil, openErr
+		}
+		if open {
+			active = append(active, session.ID)
 		}
 	}
-	return ""
+	sort.Strings(active)
+	return active, nil
 }
 
 func findSessionByID(sessions []codexSession, id string) (codexSession, bool) {
@@ -180,11 +216,23 @@ func (a *App) superviseCodex(initialAccount string, initialArgs []string) error 
 		setProcessEnvironment(cmd, env)
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 		configureManagedProcess(cmd)
+		awaitingSession := resumeCommandIndex(args) >= 0 && knownID == ""
+		activeBefore := []string(nil)
+		if awaitingSession {
+			sourceHome, profileErr := a.require(account)
+			if profileErr != nil {
+				return profileErr
+			}
+			activeBefore, profileErr = a.activeSessionsInProject(sourceHome, project)
+			if profileErr != nil {
+				return fmt.Errorf("capture active conversations before resume: %w", profileErr)
+			}
+		}
 		started := time.Now()
 		if commandErr = cmd.Start(); commandErr != nil {
 			return commandErr
 		}
-		record := managedCodex{SupervisorPID: supervisorPID, ChildPID: cmd.Process.Pid, Account: account, Project: project, CWD: cwd, SessionID: knownID, Started: started.Unix()}
+		record := managedCodex{SupervisorPID: supervisorPID, ChildPID: cmd.Process.Pid, Account: account, Project: project, CWD: cwd, SessionID: knownID, AwaitingSession: awaitingSession, ActiveBeforeResume: activeBefore, Started: started.Unix()}
 		if commandErr = a.writeManaged(record); commandErr != nil {
 			_ = terminateManagedProcess(cmd, true)
 			_ = cmd.Wait()
@@ -327,6 +375,115 @@ func compatibleSessionCopy(candidates []codexSession) (codexSession, error) {
 	return chosen, nil
 }
 
+func managedSessionKey(account, id string) string {
+	return account + "\x00" + id
+}
+
+func stringSliceSet(values []string) map[string]bool {
+	found := make(map[string]bool, len(values))
+	for _, value := range values {
+		found[value] = true
+	}
+	return found
+}
+
+func (a *App) resolveManagedSessions(records []managedCodex, accountSessions map[string][]codexSession, accountHomes map[string]string) ([]managedCodex, map[string]bool, map[string]codexSession, error) {
+	claimed := map[string]bool{}
+	awaiting := map[string]codexSession{}
+	candidatesByRecord := map[int][]codexSession{}
+	activeCache := map[string]bool{}
+
+	for index, record := range records {
+		if !record.AwaitingSession || record.SessionID != "" {
+			session, identifyErr := identifyManagedSessionFromList(accountSessions[record.Account], record.CWD, record.SessionID, time.Unix(record.Started, 0))
+			if identifyErr != nil {
+				continue
+			}
+			changed := record.SessionID != session.ID || record.SessionPath != session.Path || record.AwaitingSession || len(record.ActiveBeforeResume) > 0
+			record.SessionID = session.ID
+			record.SessionPath = session.Path
+			record.AwaitingSession = false
+			record.ActiveBeforeResume = nil
+			records[index] = record
+			claimed[managedSessionKey(record.Account, session.ID)] = true
+			if changed {
+				if err := a.writeManaged(record); err != nil {
+					return nil, nil, nil, err
+				}
+			}
+			continue
+		}
+
+		prior := stringSliceSet(record.ActiveBeforeResume)
+		for _, session := range accountSessions[record.Account] {
+			if prior[session.ID] {
+				continue
+			}
+			key := managedSessionKey(record.Account, session.ID)
+			open, cached := activeCache[key]
+			if !cached {
+				var activeErr error
+				open, activeErr = a.sessionIsOpen(accountHomes[record.Account], session.ID)
+				if activeErr != nil {
+					return nil, nil, nil, fmt.Errorf("inspect supervised session %s in account %s: %w", session.ID, record.Account, activeErr)
+				}
+				activeCache[key] = open
+			}
+			if open {
+				candidatesByRecord[index] = append(candidatesByRecord[index], session)
+			}
+		}
+	}
+
+	for {
+		singleOwners := map[string][]int{}
+		remaining := map[int][]codexSession{}
+		for index, candidates := range candidatesByRecord {
+			for _, session := range candidates {
+				if !claimed[managedSessionKey(records[index].Account, session.ID)] {
+					remaining[index] = append(remaining[index], session)
+				}
+			}
+			if len(remaining[index]) == 1 {
+				key := managedSessionKey(records[index].Account, remaining[index][0].ID)
+				singleOwners[key] = append(singleOwners[key], index)
+			}
+		}
+		progress := false
+		for key, owners := range singleOwners {
+			if len(owners) != 1 {
+				continue
+			}
+			index := owners[0]
+			session := remaining[index][0]
+			record := records[index]
+			record.SessionID = session.ID
+			record.SessionPath = session.Path
+			record.AwaitingSession = false
+			record.ActiveBeforeResume = nil
+			if err := a.writeManaged(record); err != nil {
+				return nil, nil, nil, err
+			}
+			records[index] = record
+			claimed[key] = true
+			delete(candidatesByRecord, index)
+			progress = true
+		}
+		if !progress {
+			break
+		}
+	}
+
+	for index, candidates := range candidatesByRecord {
+		for _, session := range candidates {
+			if !claimed[managedSessionKey(records[index].Account, session.ID)] {
+				awaiting[managedSessionKey(records[index].Account, session.ID)] = session
+			}
+		}
+	}
+	return records, claimed, awaiting, nil
+}
+
 func (a *App) projectHandoffSource(directory string) (projectHandoffPlan, error) {
 	project, err := projectRoot(directory)
 	if err != nil {
@@ -359,15 +516,13 @@ func (a *App) projectHandoffSource(directory string) (projectHandoffPlan, error)
 		return projectHandoffPlan{}, err
 	}
 	managedBySession := map[string][]managedCodex{}
-	managedKeys := map[string]bool{}
-	for index, record := range records {
-		session, identifyErr := identifyManagedSessionFromList(accountSessions[record.Account], record.CWD, record.SessionID, time.Unix(record.Started, 0))
-		if identifyErr == nil {
-			record.SessionID = session.ID
-			record.SessionPath = session.Path
-			records[index] = record
-			managedBySession[session.ID] = append(managedBySession[session.ID], record)
-			managedKeys[record.Account+"\x00"+session.ID] = true
+	records, managedKeys, awaitingBySession, err := a.resolveManagedSessions(records, accountSessions, accountHomes)
+	if err != nil {
+		return projectHandoffPlan{}, err
+	}
+	for _, record := range records {
+		if record.SessionID != "" {
+			managedBySession[record.SessionID] = append(managedBySession[record.SessionID], record)
 		}
 	}
 	sessions := make([]codexSession, 0, len(variants))
@@ -401,7 +556,8 @@ func (a *App) projectHandoffSource(directory string) (projectHandoffPlan, error)
 	unmanaged := []codexSession{}
 	for _, candidates := range variants {
 		for _, session := range candidates {
-			if managedKeys[session.Account+"\x00"+session.ID] {
+			key := managedSessionKey(session.Account, session.ID)
+			if managedKeys[key] || awaitingBySession[key].ID != "" {
 				continue
 			}
 			open, openErr := a.sessionIsOpen(accountHomes[session.Account], session.ID)
@@ -413,7 +569,16 @@ func (a *App) projectHandoffSource(directory string) (projectHandoffPlan, error)
 			}
 		}
 	}
-	return projectHandoffPlan{Project: project, Sources: sessionAccounts(sessions), Sessions: sessions, Managed: records, Unmanaged: unmanaged}, nil
+	uniqueAwaiting := map[string]codexSession{}
+	for _, session := range awaitingBySession {
+		uniqueAwaiting[session.ID] = session
+	}
+	awaiting := make([]codexSession, 0, len(uniqueAwaiting))
+	for _, session := range uniqueAwaiting {
+		awaiting = append(awaiting, session)
+	}
+	sort.Slice(awaiting, func(i, j int) bool { return awaiting[i].Updated.After(awaiting[j].Updated) })
+	return projectHandoffPlan{Project: project, Sources: sessionAccounts(sessions), Sessions: sessions, Managed: records, Awaiting: awaiting, Unmanaged: unmanaged}, nil
 }
 
 func sessionAccounts(sessions []codexSession) []string {
@@ -476,6 +641,9 @@ func filterHandoffPlan(plan projectHandoffPlan, selected map[string]bool) (proje
 		if record.SessionID != "" {
 			continue
 		}
+		if record.AwaitingSession {
+			continue
+		}
 		cwd := filepath.Clean(record.CWD)
 		candidates := []codexSession{}
 		for _, session := range selectedByCWD[cwd] {
@@ -493,6 +661,13 @@ func filterHandoffPlan(plan projectHandoffPlan, selected map[string]bool) (proje
 	plan.Sessions = sessions
 	plan.Sources = sessionAccounts(sessions)
 	plan.Managed = managed
+	awaiting := []codexSession{}
+	for _, session := range plan.Awaiting {
+		if selected[session.ID] {
+			awaiting = append(awaiting, session)
+		}
+	}
+	plan.Awaiting = awaiting
 	unmanaged := []codexSession{}
 	for _, session := range plan.Unmanaged {
 		if selected[session.ID] {
@@ -501,6 +676,14 @@ func filterHandoffPlan(plan projectHandoffPlan, selected map[string]bool) (proje
 	}
 	plan.Unmanaged = unmanaged
 	return plan, nil
+}
+
+func awaitingIdentificationError(project string, sessions []codexSession) error {
+	titles := make([]string, 0, len(sessions))
+	for _, session := range sessions {
+		titles = append(titles, sessionTitle(session, project))
+	}
+	return fmt.Errorf("supervised session identity is still ambiguous: %s; wait for identification or reopen it with an explicit codex resume session ID", strings.Join(titles, "; "))
 }
 
 func classifyOpenUnmanaged(plan projectHandoffPlan) (manual, conflicts []codexSession) {
@@ -554,6 +737,9 @@ func (a *App) planSelectedProjectHandoff(directory, target string, selected map[
 	plan, err = filterHandoffPlan(plan, selected)
 	if err != nil {
 		return projectHandoffPlan{}, err
+	}
+	if len(plan.Awaiting) > 0 {
+		return projectHandoffPlan{}, awaitingIdentificationError(plan.Project, plan.Awaiting)
 	}
 	moves := false
 	for _, session := range plan.Sessions {

@@ -11,16 +11,21 @@ import (
 func TestResumeSessionID(t *testing.T) {
 	id := "11111111-1111-4111-8111-111111111111"
 	for _, test := range []struct {
-		args []string
-		want string
+		args   []string
+		want   string
+		resume bool
 	}{
-		{[]string{"resume", id}, id},
-		{[]string{"-c", "example=true", "resume", id, "-C", "/tmp/project"}, id},
-		{[]string{"resume", "--last"}, ""},
-		{[]string{"exec", "resume", "something"}, ""},
+		{[]string{"resume", id}, id, true},
+		{[]string{"-c", "example=true", "resume", id, "-C", "/tmp/project"}, id, true},
+		{[]string{"resume", "--last"}, "", true},
+		{[]string{"exec", "resume", "something"}, "", false},
+		{nil, "", false},
 	} {
 		if got := resumeSessionID(test.args); got != test.want {
 			t.Fatalf("resumeSessionID(%v) = %q, want %q", test.args, got, test.want)
+		}
+		if got := resumeCommandIndex(test.args) >= 0; got != test.resume {
+			t.Fatalf("resumeCommandIndex(%v) found=%v, want %v", test.args, got, test.resume)
 		}
 	}
 }
@@ -45,6 +50,78 @@ func TestIdentifyManagedSession(t *testing.T) {
 	writeTestSession(t, home, "2026/09/18", "33333333-3333-4333-8333-333333333333", cwd, "ambiguous")
 	if _, err = identifyManagedSession(home, project, cwd, "", started); err == nil || !strings.Contains(err.Error(), "found 2 candidates") {
 		t.Fatal("ambiguous session was accepted", err)
+	}
+}
+
+func TestInteractiveResumeResolvesNewActiveWriterAndPersistsSession(t *testing.T) {
+	a := fixture(t)
+	ready(t, a, "work")
+	project := t.TempDir()
+	oldID := "24242424-2424-4424-8424-242424242424"
+	selectedID := "25252525-2525-4525-8525-252525252525"
+	writeTestSession(t, a.DefaultHome, "2026/09/17", oldID, project, "already open")
+	selectedPath := writeTestSession(t, a.DefaultHome, "2026/09/18", selectedID, project, "selected in resume picker")
+	a.SessionActive = func(home, id string) (bool, error) {
+		return home == a.DefaultHome && (id == oldID || id == selectedID), nil
+	}
+	record := managedCodex{
+		SupervisorPID:      os.Getpid(),
+		ChildPID:           os.Getpid(),
+		Account:            "default",
+		Project:            project,
+		CWD:                project,
+		AwaitingSession:    true,
+		ActiveBeforeResume: []string{oldID},
+		Started:            time.Now().Unix(),
+	}
+	if err := a.writeManaged(record); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := a.projectHandoffSource(project)
+	if err != nil || len(plan.Managed) != 1 || plan.Managed[0].SessionID != selectedID || len(plan.Awaiting) != 0 || len(plan.Unmanaged) != 1 {
+		t.Fatal("interactive resume was not resolved safely", plan, err)
+	}
+	handoff, err := a.planSelectedProjectHandoff(project, "work", map[string]bool{selectedID: true})
+	if err != nil || len(handoff.Managed) != 1 || handoff.Managed[0].SessionID != selectedID || len(handoff.Unmanaged) != 0 {
+		t.Fatal("resolved resume was not prepared for automatic handoff", handoff, err)
+	}
+	var persisted managedCodex
+	if err = readJSON(a.managedPath(os.Getpid()), &persisted); err != nil {
+		t.Fatal(err)
+	}
+	if persisted.SessionID != selectedID || persisted.SessionPath != selectedPath || persisted.AwaitingSession || len(persisted.ActiveBeforeResume) != 0 {
+		t.Fatal("resolved session was not persisted", persisted)
+	}
+}
+
+func TestInteractiveResumeKeepsAmbiguousWritersAwaitingIdentification(t *testing.T) {
+	a := fixture(t)
+	ready(t, a, "work")
+	project := t.TempDir()
+	firstID := "26262626-2626-4626-8626-262626262626"
+	secondID := "27272727-2727-4727-8727-272727272727"
+	writeTestSession(t, a.DefaultHome, "2026/09/17", firstID, project, "first active conversation")
+	writeTestSession(t, a.DefaultHome, "2026/09/18", secondID, project, "second active conversation")
+	a.SessionActive = func(home, id string) (bool, error) {
+		return home == a.DefaultHome && (id == firstID || id == secondID), nil
+	}
+	record := managedCodex{SupervisorPID: os.Getpid(), ChildPID: os.Getpid(), Account: "default", Project: project, CWD: project, AwaitingSession: true, Started: time.Now().Unix()}
+	if err := a.writeManaged(record); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := a.projectHandoffSource(project)
+	if err != nil || len(plan.Managed) != 1 || plan.Managed[0].SessionID != "" || len(plan.Awaiting) != 2 || len(plan.Unmanaged) != 0 {
+		t.Fatal("ambiguous resume was incorrectly classified", plan, err)
+	}
+	p := Panel{Theme: 0, HandoffSelected: map[string]bool{}}
+	p.useHandoffPlan(plan)
+	lines, _ := p.sessionLines(a)
+	view := stripANSI(strings.Join(lines, "\n"))
+	if !strings.Contains(view, "supervised · awaiting identification") || strings.Contains(view, "open outside XSwap") {
+		t.Fatalf("ambiguous supervised sessions had the wrong status:\n%s", view)
+	}
+	if _, err = a.planSelectedProjectHandoff(project, "work", map[string]bool{firstID: true}); err == nil || !strings.Contains(err.Error(), "identity is still ambiguous") {
+		t.Fatal("handoff guessed an ambiguous supervised session", err)
 	}
 }
 
