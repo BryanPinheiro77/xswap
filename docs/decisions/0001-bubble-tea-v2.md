@@ -51,7 +51,7 @@ that the probe did not call; the production measurement below supersedes it.
 | --- | ---: | ---: | ---: |
 | Stripped executable | 6,780,082 bytes | 8,012,162 bytes | +1,232,080 bytes (+18.17%) |
 | Modules in build list | 3 | 23 | +20 |
-| Current panel implementation | 1,203 lines | Not yet migrated | N/A |
+| Panel source files | 1,203 lines | 1,312 lines | +109 lines (+9.06%) |
 
 The standalone prototype executable is 3,588,722 bytes. It is not comparable to
 the full XSwap binary and is recorded only to make the experiment reproducible.
@@ -110,6 +110,15 @@ systems, including a native Windows terminal smoke test.
 Each stage must leave `xswap` usable and keep the previous renderer easy to
 restore until the last stage. Do not combine provider work or new account
 features with this migration.
+
+## Migration outcome
+
+The production migration completed without provider or account-domain changes.
+Automated tests passed natively on macOS, Linux, and Windows, and the terminal
+handoff passed pseudo-terminal integration tests on macOS and Linux. The
+maintainer also completed a manual macOS panel test. A manual Windows console
+smoke test was not available during this migration, so that remains a documented
+validation gap rather than an inferred result from cross-platform CI.
 
 ## Validation gate
 

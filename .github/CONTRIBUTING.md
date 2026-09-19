@@ -6,8 +6,10 @@ support is a future project; discuss its design before implementing a backend.
 
 ## Local setup
 
-Install Go 1.26.6 or newer. Runtime dependencies are limited to Go-maintained
-`golang.org/x/term` and its `golang.org/x/sys` dependency.
+Install Go 1.26.6 or newer. The panel uses Bubble Tea v2, and terminal support
+uses `golang.org/x/term` and `golang.org/x/sys`; Go modules resolve their
+transitive dependencies. Release binaries are statically linked and do not
+require those libraries to be installed separately.
 Real quota queries also require the official Codex CLI and ChatGPT login.
 Tests use temporary profiles and a fake app server; no personal account is needed.
 
