@@ -5,6 +5,16 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ## Unreleased
 
+## v0.5.1 — 2026-09-19
+
+### Fixed
+
+- Resolve and persist the conversation selected by an interactive `codex
+  resume` picker when exactly one new writer lock appears under its XSwap
+  supervisor.
+- Label ambiguous supervised resume sessions as awaiting identification and
+  refuse to guess which running conversation should restart during a handoff.
+
 ## v0.5.0 — 2026-09-19
 
 ### Changed

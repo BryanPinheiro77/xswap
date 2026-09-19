@@ -114,6 +114,13 @@ account. XSwap refuses the transfer if another active copy, including the
 destination copy, could be overwritten. Other projects and unselected
 conversations are left alone.
 
+When `codex resume` opens Codex's own conversation picker, XSwap tracks which
+writer locks were active before the picker started. A single newly active
+conversation is attached to its supervisor and can restart automatically during
+a later handoff. If several conversations become possible matches, the panel
+shows **supervised · awaiting identification** and refuses to guess; reopen the
+conversation with an explicit session ID or close the other active candidates.
+
 Project selection is stored in `.xswap-account` at the repository root; the
 nearest file wins in nested directories. XSwap adds it to the repository's
 local `.git/info/exclude`, preventing accidental commits without changing the

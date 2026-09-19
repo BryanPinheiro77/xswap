@@ -60,9 +60,16 @@ lets the original wrapper fast-forward and resume the matching conversation in
 the same terminal and working directory. The coordinator performs a final sync.
 Before confirmation, XSwap probes Codex's per-thread writer locks. A held lock
 without a matching live XSwap supervisor identifies an open unmanaged
-conversation; the handoff is blocked and the panel names it so the user can
-close it and reopen it through `codex resume`. This prevents the source and
-destination histories from accepting new messages independently.
+conversation. The panel names it, requires explicit confirmation, copies a safe
+snapshot, and leaves it for manual resume; the user must close the source before
+sending another message in the destination copy.
+
+For `codex resume` without an explicit UUID, the supervisor records the active
+writer locks before launching Codex. The planner associates and persists a
+single newly active conversation. Multiple possible matches remain supervised
+but unidentified, are labeled as awaiting identification, and cannot enter a
+handoff until the association becomes unambiguous. This prevents automatic
+restart from guessing between active histories.
 
 The panel derives its home-screen project picker only from working directories
 stored in Codex session metadata across registered profiles. It resolves Git
