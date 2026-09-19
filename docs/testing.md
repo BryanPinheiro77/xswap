@@ -20,18 +20,19 @@ call GitHub, or update the contributor's installed executable.
 | Auto-switch | Lowest eligible quota wins; committed selection | Disabled accounts, cooldown, stale/error/expired quotas, API keys, insufficient improvement, monitor off, changed active selection |
 | Monitor | Background operation and clean stop | Duplicate monitor exits without taking over |
 | Quota protocol | Handshake, notifications, account and quota responses | Cancellation terminates and waits for the server process |
-| Panel | Menu, watch/back, enable/disable, removal, thin bars | Cancelled removal; update item hidden without a newer release |
+| Panel | Bubble Tea navigation, resize, Unicode input, watch/back, enable/disable, removal, thin bars | Zero-sized pseudo-terminals, cancelled removal, and update item hidden without a newer release |
 | Updates | Stable release discovery, caching, confirmed installation, Homebrew routing, Unix atomic replacement, Windows version activation, backup | Homebrew refresh failure; draft/prerelease/invalid tags, invalid repositories, offline/HTTP/JSON errors, oversized responses, checksum mismatch, unsafe/duplicate tar or zip entries, foreign asset URLs, unconfirmed noninteractive install |
 | Release publishing | New and resumed drafts, verified asset reuse, bounded upload retry | Divergent/starter assets replaced; duplicate drafts rejected |
 
 ## Limits and release validation
 
-The Unix terminal integration tests use the standard `script` utility to open a
-pseudo-terminal. They select and confirm Update version with real keyboard
-input and check that the panel returns the action and restores the terminal.
-The Add account test sends exactly one line to a prompt after leaving the panel
-and checks that no panel reader consumes that input. These tests use simulated
-release metadata and never install an update or perform an account login.
+The Unix terminal integration tests use the standard `script` utility to open
+an 80x24 or larger pseudo-terminal. They navigate and confirm actions with real
+keyboard input, verify that the alternate screen is restored, and exercise a
+child prompt through Bubble Tea's terminal handoff. The child receives exactly
+one input line before Bubble Tea recaptures and redraws the panel. These tests
+use simulated release metadata and never install an update or perform an
+account login.
 
 The Windows CI job builds the executable and runs native integration tests for
 installation, wrappers, Codex routing, batch launchers, and safe update

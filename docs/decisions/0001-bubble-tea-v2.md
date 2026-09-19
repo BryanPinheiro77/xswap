@@ -1,6 +1,6 @@
 # Bubble Tea v2 evaluation
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-09-18
 - Decision owner: XSwap maintainer
 - Scope: terminal user interface only
@@ -20,8 +20,8 @@ framework.
 
 ## Evaluation
 
-An isolated prototype lives in `experiments/bubbletea-v2`. It exercises the
-behaviors that have caused regressions in XSwap:
+An isolated prototype exercised the behaviors that have caused regressions in
+XSwap before the production migration:
 
 - arrow-key navigation and single-key confirmation;
 - editable Unicode text with save and cancellation;
@@ -37,8 +37,8 @@ that Bubble Tea redraws the panel after receiving the child result. The explicit
 PTY size matters: a headless `script` process otherwise starts at 0x0 and has no
 drawable viewport.
 
-The prototype uses Bubble Tea v2.0.9 through its canonical module path,
-`charm.land/bubbletea/v2`. The production module remains unchanged.
+The prototype and production panel use Bubble Tea v2.0.9 through its canonical
+module path, `charm.land/bubbletea/v2`.
 
 ### Measured impact
 

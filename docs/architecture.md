@@ -1,8 +1,9 @@
 # Architecture
 
-XSwap is a Go executable with no third-party runtime libraries. It targets
-macOS, Linux, and Windows. Terminal and process operations use platform-specific
-Go implementations, and state changes use portable lock directories.
+XSwap is a statically linked Go executable with no separately installed runtime
+libraries. It targets macOS, Linux, and Windows. Bubble Tea v2 owns the panel
+event loop and terminal lifecycle. Process operations use platform-specific Go
+implementations, and state changes use portable lock directories.
 
 Source files and their tests live together in `cmd/xswap/`. The root contains
 build configuration and the project entry documents; community policies live
@@ -20,7 +21,8 @@ in `.github/` and longer guides in `docs/`.
 | `project.go` | Project-root discovery and local account selection |
 | `session.go` | Validated project-session discovery, copying, and Codex indexing |
 | `supervisor.go` | Managed Codex lifecycle and confirmed project handoff |
-| `tui.go` | Account menu, watch screen, management, and auto-switch view |
+| `tui.go` | Panel state, account views, management, and navigation rules |
+| `tui_bubbletea.go` | Bubble Tea event loop, async refresh, resize, and interactive action handoff |
 | `swap_test.go` | Behavioral tests with isolated data and a fake app server |
 
 ## Account isolation
@@ -100,6 +102,19 @@ windows. A hollow or partial response retains the last valid in-memory reading
 as stale instead of replacing it or refreshing its timestamp. The panel labels
 valid, stale, and unavailable readings explicitly; stale readings never qualify
 for automatic rotation.
+
+## Terminal panel
+
+The panel uses Bubble Tea's model, update, and view lifecycle. Account and
+session rules remain ordinary Go functions and do not depend on the renderer.
+Quota reads and release checks return as messages, so the event loop stays
+responsive while work is in progress.
+
+Login, update, removal, and conversation continuation run through Bubble Tea's
+blocking action boundary. Bubble Tea releases raw mode and the alternate screen,
+hands the terminal to the action, then restores and redraws the panel. This
+keeps one input owner at a time and avoids carrying buffered confirmation keys
+into the following prompt.
 
 ## Automatic rotation
 
