@@ -16,7 +16,11 @@ import (
 
 type panelTickMsg time.Time
 type panelUpdateCheckMsg bool
-type panelRefreshMsg []panelUpdate
+type panelRefreshMsg struct {
+	ID        uint64
+	Updates   []panelUpdate
+	Cancelled bool
+}
 
 type panelActionResult struct {
 	Message    string
@@ -59,6 +63,9 @@ type panelModel struct {
 	err             error
 	nextUpdateCheck time.Time
 	runAction       func(string, io.Reader, io.Writer) panelActionResult
+	refreshCancel   context.CancelFunc
+	refreshID       uint64
+	pendingAction   string
 }
 
 func newPanelModel(ctx context.Context, app *App, mode, filter string, interval int) (*panelModel, error) {
@@ -167,25 +174,36 @@ func (m *panelModel) actionCommand(action string) tea.Cmd {
 }
 
 func panelTick() tea.Cmd {
-	return tea.Tick(250*time.Millisecond, func(now time.Time) tea.Msg { return panelTickMsg(now) })
+	return tea.Tick(time.Second, func(now time.Time) tea.Msg { return panelTickMsg(now) })
 }
 
-func (m *panelModel) refreshCommand() tea.Cmd {
+func (m *panelModel) startRefresh() tea.Cmd {
+	if m.refreshCancel != nil {
+		m.refreshCancel()
+	}
+	refreshCtx, cancel := context.WithCancel(m.ctx)
+	m.refreshCancel = cancel
+	m.refreshID++
+	id := m.refreshID
 	names := append([]string{}, m.names...)
+	m.panel.Busy = true
 	return func() tea.Msg {
 		updates := make([]panelUpdate, 0, len(names)+1)
 		for _, name := range names {
-			if m.ctx.Err() != nil {
-				return panelRefreshMsg(updates)
+			if refreshCtx.Err() != nil {
+				return panelRefreshMsg{ID: id, Cancelled: true}
 			}
-			record, err := m.app.readLimits(m.ctx, name)
+			record, err := m.app.readLimits(refreshCtx, name)
+			if refreshCtx.Err() != nil {
+				return panelRefreshMsg{ID: id, Cancelled: true}
+			}
 			message := ""
 			if err != nil {
 				message = err.Error()
 			}
 			updates = append(updates, panelUpdate{Name: name, Record: record, Error: message})
 		}
-		return panelRefreshMsg(updates)
+		return panelRefreshMsg{ID: id, Updates: updates}
 	}
 }
 
@@ -195,7 +213,7 @@ func (m *panelModel) updateCheckCommand() tea.Cmd {
 
 func (m *panelModel) Init() tea.Cmd {
 	m.nextUpdateCheck = time.Now().Add(updateCheckInterval)
-	return tea.Batch(panelTick(), m.refreshCommand(), m.updateCheckCommand())
+	return tea.Batch(panelTick(), m.startRefresh(), m.updateCheckCommand())
 }
 
 func bubbleKey(msg tea.KeyPressMsg) string {
@@ -254,11 +272,22 @@ func (m *panelModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			m.panel.Width, m.panel.Height = msg.Width, msg.Height
 		}
 	case panelRefreshMsg:
-		for _, update := range msg {
-			m.panel.Records[update.Name] = reconcileQuotaRecord(m.panel.Records[update.Name], update.Record, update.Error)
+		if msg.ID != m.refreshID {
+			return m, nil
+		}
+		m.refreshCancel = nil
+		if !msg.Cancelled {
+			for _, update := range msg.Updates {
+				m.panel.Records[update.Name] = reconcileQuotaRecord(m.panel.Records[update.Name], update.Record, update.Error)
+			}
+			m.panel.Due = time.Now().Add(time.Duration(m.interval) * time.Second)
 		}
 		m.panel.Busy = false
-		m.panel.Due = time.Now().Add(time.Duration(m.interval) * time.Second)
+		if m.pendingAction != "" {
+			action := m.pendingAction
+			m.pendingAction = ""
+			return m, m.actionCommand(action)
+		}
 	case panelUpdateCheckMsg:
 		available := bool(msg)
 		if m.panel.UpdateAvailable != available {
@@ -284,8 +313,7 @@ func (m *panelModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.panel.Mode = "home"
 		m.panel.Cursor, m.panel.MenuCursor, m.panel.Offset = 0, 0, 0
-		m.panel.Busy = true
-		return m, tea.Batch(m.refreshCommand(), m.updateCheckCommand())
+		return m, tea.Batch(m.startRefresh(), m.updateCheckCommand())
 	case panelTickMsg:
 		now := time.Time(msg)
 		commands := []tea.Cmd{panelTick()}
@@ -294,8 +322,7 @@ func (m *panelModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			commands = append(commands, m.updateCheckCommand())
 		}
 		if !m.panel.Busy && !m.panel.Due.IsZero() && !now.Before(m.panel.Due) {
-			m.panel.Busy = true
-			commands = append(commands, m.refreshCommand())
+			commands = append(commands, m.startRefresh())
 		}
 		return m, tea.Batch(commands...)
 	case tea.KeyPressMsg:
@@ -310,13 +337,19 @@ func (m *panelModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		switch {
 		case action == "refresh":
 			if !m.panel.Busy {
-				m.panel.Busy = true
-				return m, m.refreshCommand()
+				return m, m.startRefresh()
 			}
 		case action == "quit":
 			m.action = action
 			return m, tea.Quit
 		case action == "add", action == "update", strings.HasPrefix(action, "remove:"), strings.HasPrefix(action, "project-handoff:"):
+			if m.panel.Busy {
+				m.pendingAction = action
+				if m.refreshCancel != nil {
+					m.refreshCancel()
+				}
+				return m, nil
+			}
 			return m, m.actionCommand(action)
 		}
 	}

@@ -3,7 +3,19 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"unicode"
 )
+
+func appendPanelInput(current, text string, limit int) string {
+	runes := []rune(current)
+	for _, value := range text {
+		if unicode.IsControl(value) || len(runes) >= limit {
+			continue
+		}
+		runes = append(runes, value)
+	}
+	return string(runes)
+}
 
 func (p *Panel) key(a *App, names []string, key string) (string, error) {
 	if key == "ctrl-c" || (key == "q" && p.Mode != "rename-input") {
@@ -66,8 +78,8 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 	}
 	if p.Mode == "rename-input" {
 		if key == "backspace" || key == "delete" {
-			if len(p.Input) > 0 {
-				p.Input = p.Input[:len(p.Input)-1]
+			if runes := []rune(p.Input); len(runes) > 0 {
+				p.Input = string(runes[:len(runes)-1])
 			}
 			return "", nil
 		}
@@ -82,10 +94,8 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 			}
 			return "", nil
 		}
-		if key != "up" && key != "down" && len([]rune(key)) == 1 && key >= " " && key != "\x7f" {
-			if len([]rune(p.Input)) < 64 {
-				p.Input += key
-			}
+		if key != "up" && key != "down" {
+			p.Input = appendPanelInput(p.Input, key, 64)
 			return "", nil
 		}
 	}

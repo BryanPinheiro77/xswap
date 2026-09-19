@@ -41,12 +41,14 @@ func TestBubbleTeaPanelResizeNavigationAndUnicodeInput(t *testing.T) {
 	if model.panel.Mode != "rename-input" {
 		t.Fatal("Enter did not open rename input", model.panel.Mode)
 	}
-	for _, value := range []string{"W", "o", "r", "k", " ", "q", "✨"} {
+	for _, value := range []string{"W", "o", "r", "k", " ", "q", "🚀", "✨"} {
 		model, _ = updatePanelModel(t, model, bubblePress(value, []rune(value)[0]))
 	}
+	model, _ = updatePanelModel(t, model, bubblePress("", tea.KeyBackspace))
+	model, _ = updatePanelModel(t, model, bubblePress("✨", '✨'))
 	model, _ = updatePanelModel(t, model, bubblePress("", tea.KeyEnter))
 	settings, err := a.settings()
-	if err != nil || settings.DisplayNames["default"] != "Work q✨" {
+	if err != nil || settings.DisplayNames["default"] != "Work q🚀✨" {
 		t.Fatal("Unicode display name was not saved", settings.DisplayNames, err)
 	}
 	view := model.View()
