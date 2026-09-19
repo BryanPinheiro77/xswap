@@ -43,13 +43,13 @@ module path, `charm.land/bubbletea/v2`.
 ### Measured impact
 
 Measurements were taken on macOS arm64 with Go 1.26.6 and stripped binaries.
-The production comparison linked Bubble Tea into the existing XSwap executable
-without migrating a screen, so it measures the dependency's incremental binary
-cost separately from prototype code.
+The final measurement uses the complete migrated panel. An earlier link-only
+probe reported a smaller result because the Go linker removed renderer paths
+that the probe did not call; the production measurement below supersedes it.
 
-| Measure | Current XSwap | With Bubble Tea linked | Change |
+| Measure | XSwap v0.4.2 | Migrated panel | Change |
 | --- | ---: | ---: | ---: |
-| Stripped executable | 6,780,082 bytes | 6,919,026 bytes | +138,944 bytes (+2.05%) |
+| Stripped executable | 6,780,082 bytes | 8,012,162 bytes | +1,232,080 bytes (+18.17%) |
 | Modules in build list | 3 | 23 | +20 |
 | Current panel implementation | 1,203 lines | Not yet migrated | N/A |
 
@@ -74,8 +74,8 @@ row is capped by its weight.
 | Cross-platform terminal behavior | 15 | 8 | 12 |
 | Navigation, input, resize, and async UI | 15 | 7 | 13 |
 | Dependency and supply-chain simplicity | 10 | 10 | 5 |
-| Executable footprint | 5 | 5 | 5 |
-| **Total** | **100** | **61** | **84** |
+| Executable footprint | 5 | 5 | 4 |
+| **Total** | **100** | **61** | **83** |
 
 Bubble Tea scores higher because its event loop and `tea.ExecProcess` give one
 component responsibility for pausing input, restoring terminal state, and
@@ -91,7 +91,8 @@ profile storage, quota selection, updates, session copying, and process
 supervision must remain usable and testable without a renderer.
 
 Confidence is **medium-high (78%)**. The prototype directly validates the most
-important Unix terminal lifecycle and the binary cost is small. Confidence is
+important Unix terminal lifecycle and the binary cost remains acceptable for a
+single static executable. Confidence is
 below high until the migrated XSwap flows pass on all three supported operating
 systems, including a native Windows terminal smoke test.
 
