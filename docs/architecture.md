@@ -21,7 +21,8 @@ in `.github/` and longer guides in `docs/`.
 | `project.go` | Project-root discovery and local account selection |
 | `session.go` | Validated project-session discovery, copying, and Codex indexing |
 | `supervisor.go` | Managed Codex lifecycle and confirmed project handoff |
-| `tui.go` | Panel state, account views, management, and navigation rules |
+| `tui.go` | Panel state, account and session view data, and shared helpers |
+| `tui_render.go`, `tui_input.go` | Declarative panel rendering and navigation rules |
 | `tui_bubbletea.go` | Bubble Tea event loop, async refresh, resize, and interactive action handoff |
 | `swap_test.go` | Behavioral tests with isolated data and a fake app server |
 
