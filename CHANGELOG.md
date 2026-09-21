@@ -5,6 +5,18 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ## Unreleased
 
+### Fixed
+
+- Keep the XSwap `codex` wrapper in a private command directory that precedes
+  package-manager launchers, so updating the official Codex CLI no longer
+  disables account selection while still using the updated CLI.
+- Detect missing or changed Codex command integration and offer **Repair Codex
+  integration…** in the panel. Unix installation now manages an idempotent
+  shell configuration block, and Windows keeps its wrapper directory first in
+  the user `PATH`.
+- Ignore legacy account pins at the user home so they cannot shadow every
+  global **Switch account…** selection.
+
 ## v0.5.1 — 2026-09-19
 
 ### Fixed

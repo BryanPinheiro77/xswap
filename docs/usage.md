@@ -201,9 +201,16 @@ Profiles copy `config.toml` only on creation. Subsequent config updates and plug
 installations are not synchronized. Skills are shared by symlink. Each account
 has separate Codex history and runtime state.
 
-If npm or another installer replaces the `codex` wrapper, run `xswap install`
-to repair command links. `xswap uninstall` stops auto-switch and restores the
-original CLI without deleting account data.
+On macOS and Linux, `xswap install` places a durable wrapper under
+`~/.codex-swap/bin` and adds that directory before package-manager commands in
+the active shell configuration. Updating Codex through npm or another package
+manager still updates the official CLI that XSwap launches, without replacing
+the active wrapper. Open a new terminal after installation or repair. If the
+shell block or wrapper is missing, the panel shows **Repair Codex
+integration…**; selecting it is equivalent to running `xswap install` again.
+On Windows, the installer similarly keeps `%LOCALAPPDATA%\XSwap\bin` first in
+the user `PATH`. `xswap uninstall` stops auto-switch and removes this integration
+without deleting account data or the official CLI.
 
 ## Updating
 

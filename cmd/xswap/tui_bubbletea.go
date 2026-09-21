@@ -77,9 +77,10 @@ func newPanelModel(ctx context.Context, app *App, mode, filter string, interval 
 	if filter != "" {
 		names = []string{filter}
 	}
+	integrationIssue := app.codexIntegrationIssue()
 	return &panelModel{
 		app:       app,
-		panel:     Panel{Mode: mode, Filter: filter, Records: map[string]Record{}, Width: 120, Height: 30, Busy: true},
+		panel:     Panel{Mode: mode, Filter: filter, Message: integrationIssue, IntegrationIssue: integrationIssue, Records: map[string]Record{}, Width: 120, Height: 30, Busy: true},
 		names:     names,
 		settings:  settings,
 		filter:    filter,
@@ -108,6 +109,14 @@ func (a *App) runPanelAction(action string, input io.Reader, output io.Writer) p
 			return result
 		} else {
 			result.Message = "XSwap is already up to date."
+		}
+	case action == "repair-install":
+		_, _ = fmt.Fprintln(output, "Repairing the Codex command integration…")
+		if err := a.install(); err != nil {
+			_, _ = fmt.Fprintln(output, "Repair failed:", err)
+			result.Message = "Repair failed: " + err.Error()
+		} else {
+			result.Message = "Codex integration repaired. Open a new terminal to activate the durable wrapper."
 		}
 	case action == "add":
 		name, err := a.createNumbered()
@@ -307,6 +316,7 @@ func (m *panelModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 		m.names = m.app.names()
+		m.panel.IntegrationIssue = m.app.codexIntegrationIssue()
 		if m.filter != "" {
 			m.names = []string{m.filter}
 		}
@@ -344,7 +354,7 @@ func (m *panelModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		case action == "quit":
 			m.action = action
 			return m, tea.Quit
-		case action == "add", action == "update", strings.HasPrefix(action, "remove:"), strings.HasPrefix(action, "project-handoff:"):
+		case action == "add", action == "update", action == "repair-install", strings.HasPrefix(action, "remove:"), strings.HasPrefix(action, "project-handoff:"):
 			if m.panel.Busy {
 				m.pendingAction = action
 				if m.refreshCancel != nil {

@@ -264,6 +264,8 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 				p.Mode = "disable"
 			case "Remove account…":
 				p.Mode = "remove"
+			case "Repair Codex integration…":
+				return "repair-install", nil
 			case "Theme…":
 				p.Theme = (p.Theme + 1) % 3
 			case "Quit":

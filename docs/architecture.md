@@ -33,9 +33,16 @@ in `.github/` and longer guides in `docs/`.
 skills directory; credentials, sessions, caches, and databases are not copied.
 Existing named profiles remain compatible across manager upgrades.
 
-On macOS/Linux, the installer replaces command symlinks in `~/.local/bin`. On
-Windows, it creates owned `.cmd` wrappers in `%LOCALAPPDATA%\XSwap\bin` and adds
-that directory to the user `PATH`. The `codex` entry
+On macOS/Linux, the installer owns command symlinks in `~/.codex-swap/bin` and
+prepends that directory through a marked block in the active shell configuration.
+Compatibility links for `xswap` and `codex-swap` remain in `~/.local/bin`.
+Keeping the active `codex` wrapper outside package-manager command directories
+means a Codex package update can replace its own launcher without displacing
+XSwap. The original CLI path remains recorded and receives package updates
+normally. XSwap validates shell configuration files, writes them atomically,
+and exposes a repair action when either the managed block or wrapper is missing.
+On Windows, it creates owned `.cmd` wrappers in `%LOCALAPPDATA%\XSwap\bin` and
+keeps that directory first in the user `PATH`. The `codex` entry
 executes the original CLI with the selected home, retaining normal arguments and
 exit behavior. An explicitly exported `CODEX_HOME` takes priority. `xswap run
 NAME` always uses the requested profile. The original package is not modified.

@@ -24,8 +24,7 @@ OpenAI or Anthropic product. `codex-swap` remains a compatibility alias.
 ## Install
 
 Prerequisite: the official Codex CLI. Building from source also requires Go
-1.26+; release binaries do not require Go. On macOS/Linux, add `~/.local/bin`
-to your `PATH`.
+1.26+; release binaries do not require Go.
 
 Recommended on macOS or Linux with Homebrew:
 
@@ -62,7 +61,10 @@ The installer creates the `xswap`, `codex-swap`, and `codex` commands using
 platform-specific links or wrappers. The `codex` wrapper supervises each newly
 launched terminal session and calls your original CLI with the selected home; it
 does not modify the Codex package. Your existing login stays available as
-`default`. Opening the `xswap` panel before `codex` is not required.
+`default`. On macOS/Linux, `xswap install` adds its private command directory to
+your shell `PATH`; on Windows, it places the XSwap command directory first in
+your user `PATH`. Open a new terminal after installation. Opening the `xswap`
+panel before `codex` is not required.
 
 [GitHub Releases](https://github.com/BryanPinheiro77/xswap/releases) provide
 macOS, Linux, and Windows archives for arm64/amd64. On macOS/Linux, extract the
@@ -192,9 +194,12 @@ An explicitly exported `CODEX_HOME` overrides the `codex` wrapper's selection.
 `xswap run NAME` always uses that profile. Do not share manager data: it contains
 credentials and private account information.
 
-Run `xswap install` if a Codex update overwrites the wrapper.
-`xswap uninstall` stops auto-switch and restores the original CLI without
-deleting profiles. Claude is not supported in this version.
+Codex package updates continue updating the official CLI normally. XSwap keeps
+its wrapper in a separate command directory that takes precedence in new
+terminals, so those updates cannot displace account selection. If that shell
+integration is removed or changed, the panel shows **Repair Codex integration…**.
+`xswap uninstall` stops auto-switch and removes the wrapper without deleting
+profiles or the official CLI. Claude is not supported in this version.
 
 ## Development
 

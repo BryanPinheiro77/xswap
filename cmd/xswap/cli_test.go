@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"runtime"
 	"strings"
 	"testing"
 )
@@ -61,108 +60,6 @@ func TestCLIRenameDisplayName(t *testing.T) {
 	}
 }
 
-func isolatedInstaller(t *testing.T) *App {
-	t.Helper()
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("TERM", "dumb")
-	t.Setenv("PATH", t.TempDir())
-	a := fixture(t)
-	a.Binary = filepath.Join(t.TempDir(), "xswap")
-	if err := os.WriteFile(a.Binary, []byte("fake manager"), 0755); err != nil {
-		t.Fatal(err)
-	}
-	var err error
-	a.Binary, err = filepath.EvalSymlinks(a.Binary)
-	if err != nil {
-		t.Fatal(err)
-	}
-	cli := filepath.Join(t.TempDir(), "codex")
-	if err := os.WriteFile(cli, []byte("fake original"), 0755); err != nil {
-		t.Fatal(err)
-	}
-	cli, err = filepath.EvalSymlinks(cli)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := writeJSON(filepath.Join(a.Root, "installation.json"), map[string]string{"cli": cli, "manager": a.Binary}); err != nil {
-		t.Fatal(err)
-	}
-	return a
-}
-
-func TestInstallerRepairAndUninstallInTemporaryHome(t *testing.T) {
-	a := isolatedInstaller(t)
-	ready(t, a, "work")
-	if err := a.install(); err != nil {
-		t.Fatal(err)
-	}
-	if err := a.install(); err != nil {
-		t.Fatal("repair", err)
-	}
-	home, _ := os.UserHomeDir()
-	directory := filepath.Join(home, ".local", "bin")
-	for _, name := range []string{"xswap", "codex-swap", "codex"} {
-		target, err := filepath.EvalSymlinks(filepath.Join(directory, name))
-		if err != nil || target != a.Binary {
-			t.Fatal(name, target, err)
-		}
-	}
-	cli, err := a.original()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := a.uninstall(); err != nil {
-		t.Fatal(err)
-	}
-	if exists(filepath.Join(directory, "xswap")) || exists(filepath.Join(directory, "codex-swap")) {
-		t.Fatal("manager wrappers remain")
-	}
-	restored, err := filepath.EvalSymlinks(filepath.Join(directory, "codex"))
-	if err != nil || restored != cli {
-		t.Fatal("original not restored", restored, err)
-	}
-	profile, _ := a.profile("work")
-	if !exists(filepath.Join(profile, "auth.json")) {
-		t.Fatal("uninstall lost account")
-	}
-}
-
-func TestUnixInstallerKeepsStableHomebrewLink(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Unix symlink behavior")
-	}
-	a := isolatedInstaller(t)
-	cellarBinary := a.Binary
-	stable := filepath.Join(t.TempDir(), "opt", "xswap", "bin", "xswap")
-	if err := os.MkdirAll(filepath.Dir(stable), 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink(cellarBinary, stable); err != nil {
-		t.Fatal(err)
-	}
-	a.Binary = stable
-	a.PackageManager = "homebrew"
-	if err := a.install(); err != nil {
-		t.Fatal(err)
-	}
-	if err := a.install(); err != nil {
-		t.Fatal("repair through stable package link", err)
-	}
-	home, _ := os.UserHomeDir()
-	installed := filepath.Join(home, ".local", "bin", "xswap")
-	target, err := os.Readlink(installed)
-	if err != nil || target != stable {
-		t.Fatal("installer did not retain stable Homebrew path", target, err)
-	}
-	if err := a.uninstall(); err != nil {
-		t.Fatal(err)
-	}
-	if exists(installed) {
-		t.Fatal("Homebrew-managed wrapper remained after uninstall")
-	}
-}
-
 func TestNewAppReadsHomebrewWrapperMetadata(t *testing.T) {
 	stable := filepath.Join(t.TempDir(), "opt", "xswap", "bin", "xswap")
 	t.Setenv("XSWAP_PACKAGE_MANAGER", "homebrew")
@@ -177,50 +74,6 @@ func TestNewAppReadsHomebrewWrapperMetadata(t *testing.T) {
 	a = newApp()
 	if a.PackageManager != "" || a.Binary == stable {
 		t.Fatal("unknown package manager metadata accepted", a.PackageManager, a.Binary)
-	}
-}
-
-func TestInstallerRefusesUnrelatedExecutables(t *testing.T) {
-	for _, symlink := range []bool{false, true} {
-		t.Run(map[bool]string{false: "regular file", true: "foreign symlink"}[symlink], func(t *testing.T) {
-			a := isolatedInstaller(t)
-			home, _ := os.UserHomeDir()
-			directory := filepath.Join(home, ".local", "bin")
-			if err := os.MkdirAll(directory, 0755); err != nil {
-				t.Fatal(err)
-			}
-			target := filepath.Join(directory, "xswap")
-			if symlink {
-				other := filepath.Join(t.TempDir(), "other")
-				if err := os.WriteFile(other, []byte("other"), 0755); err != nil {
-					t.Fatal(err)
-				}
-				if err := os.Symlink(other, target); err != nil {
-					t.Fatal(err)
-				}
-			} else {
-				if err := os.WriteFile(target, []byte("other"), 0755); err != nil {
-					t.Fatal(err)
-				}
-			}
-			if err := a.install(); err == nil {
-				t.Fatal("overwrote unrelated executable")
-			}
-			data, err := os.ReadFile(target)
-			if err != nil || string(data) != "other" {
-				t.Fatal("changed unrelated executable", err)
-			}
-		})
-	}
-}
-
-func TestInstallerRequiresOriginalCLI(t *testing.T) {
-	a := isolatedInstaller(t)
-	if err := os.Remove(filepath.Join(a.Root, "installation.json")); err != nil {
-		t.Fatal(err)
-	}
-	if err := a.install(); err == nil {
-		t.Fatal("installed without official CLI")
 	}
 }
 

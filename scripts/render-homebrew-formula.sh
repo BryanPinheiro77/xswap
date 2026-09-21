@@ -68,8 +68,9 @@ class Xswap < Formula
     <<~EOS
       The official Codex CLI must be installed before configuring XSwap.
       Run \`xswap install\` once to connect XSwap to the official Codex CLI.
+      Open a new terminal after installation so the durable wrapper takes precedence.
       XSwap installed by Homebrew is updated with \`brew upgrade xswap\`.
-      Before removing the formula, run \`xswap uninstall\` to restore Codex.
+      Before removing the formula, run \`xswap uninstall\` to remove the wrapper.
     EOS
   end
 

@@ -46,6 +46,21 @@ func TestWindowsInstallRepairAndUninstall(t *testing.T) {
 	if configured != directory {
 		t.Fatalf("PATH configured for %q, want %q", configured, directory)
 	}
+	if issue := a.codexIntegrationIssue(); issue != "" {
+		t.Fatal(issue)
+	}
+	if err := os.Remove(filepath.Join(directory, "codex.cmd")); err != nil {
+		t.Fatal(err)
+	}
+	if a.codexIntegrationIssue() == "" {
+		t.Fatal("missing Codex wrapper was reported as healthy")
+	}
+	if err := a.install(); err != nil {
+		t.Fatal("one-step repair failed", err)
+	}
+	if issue := a.codexIntegrationIssue(); issue != "" {
+		t.Fatal("repair did not restore integration", issue)
+	}
 	for _, item := range []struct {
 		name  string
 		codex bool
@@ -62,6 +77,15 @@ func TestWindowsInstallRepairAndUninstall(t *testing.T) {
 		t.Fatal("repair failed:", err)
 	}
 	if err := os.WriteFile(filepath.Join(directory, "xswap.cmd"), []byte("foreign"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(directory, "codex.cmd"), []byte("foreign"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if a.codexIntegrationIssue() == "" {
+		t.Fatal("foreign Codex wrapper was reported as healthy")
+	}
+	if err := os.WriteFile(filepath.Join(directory, "codex.cmd"), windowsWrapper(a.Binary, true), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if err := a.install(); err == nil || !strings.Contains(err.Error(), "refusing to replace") {
