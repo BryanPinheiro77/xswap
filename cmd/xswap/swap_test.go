@@ -301,6 +301,21 @@ func TestPanelMenuWatchBackAndManagement(t *testing.T) {
 		t.Fatal("remove UI", a.names())
 	}
 }
+
+func TestPanelOffersCodexIntegrationRepairOnlyWhenNeeded(t *testing.T) {
+	p := Panel{Mode: "home", Records: map[string]Record{}, IntegrationIssue: "repair required"}
+	for index, item := range p.menu() {
+		if item == "Repair Codex integration…" {
+			p.MenuCursor = index
+			action, err := p.key(fixture(t), []string{"default"}, "enter")
+			if err != nil || action != "repair-install" {
+				t.Fatal(action, err)
+			}
+			return
+		}
+	}
+	t.Fatal("repair action missing")
+}
 func TestThinBarsAndQuotaBuckets(t *testing.T) {
 	now := time.Now()
 	record := quota(81, 87, now.Unix())

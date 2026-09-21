@@ -63,12 +63,11 @@ var removeWindowsUserPath = deleteWindowsUserPath
 func persistWindowsUserPath(directory string) error {
 	const script = `$target = $env:XSWAP_INSTALL_DIR
 $current = [Environment]::GetEnvironmentVariable('Path', 'User')
-$parts = @($current -split ';' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-$found = $parts | Where-Object { [string]::Equals($_.TrimEnd('\'), $target.TrimEnd('\'), [StringComparison]::OrdinalIgnoreCase) }
-if (-not $found) {
-  $next = if ([string]::IsNullOrWhiteSpace($current)) { $target } else { $current.TrimEnd(';') + ';' + $target }
-  [Environment]::SetEnvironmentVariable('Path', $next, 'User')
-}`
+$parts = @($current -split ';' | Where-Object {
+  -not [string]::IsNullOrWhiteSpace($_) -and
+  -not [string]::Equals($_.TrimEnd('\'), $target.TrimEnd('\'), [StringComparison]::OrdinalIgnoreCase)
+})
+[Environment]::SetEnvironmentVariable('Path', ((@($target) + $parts) -join ';'), 'User')`
 	cmd := exec.Command("powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script)
 	cmd.Env = envWith(os.Environ(), "XSWAP_INSTALL_DIR", directory)
 	if output, err := cmd.CombinedOutput(); err != nil {
@@ -79,6 +78,18 @@ if (-not $found) {
 		return fmt.Errorf("could not add XSwap to the user PATH: %s", message)
 	}
 	return nil
+}
+
+func (a *App) codexIntegrationIssue() string {
+	if _, err := a.original(); err != nil {
+		return "Codex integration needs repair; choose Repair Codex integration or run xswap install."
+	}
+	directory, err := windowsInstallDir()
+	path := filepath.Join(directory, "codex.cmd")
+	if err != nil || !exists(path) || !ownedWindowsWrapper(path, a.Binary, "", true) {
+		return "Codex integration needs repair; choose Repair Codex integration or run xswap install."
+	}
+	return ""
 }
 
 func deleteWindowsUserPath(directory string) error {

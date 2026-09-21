@@ -66,6 +66,7 @@ type Panel struct {
 	Records                               map[string]Record
 	Busy                                  bool
 	UpdateAvailable                       bool
+	IntegrationIssue                      string
 	Due                                   time.Time
 	Width, Height                         int
 	HandoffManaged                        int
@@ -133,6 +134,9 @@ func (p *Panel) menu() []string {
 	for _, item := range menuItems {
 		if item == "Remove account…" && p.UpdateAvailable {
 			items = append(items, "Update version…")
+		}
+		if item == "Theme…" && p.IntegrationIssue != "" {
+			items = append(items, "Repair Codex integration…")
 		}
 		items = append(items, item)
 	}
