@@ -72,6 +72,26 @@ func TestProjectAccountResolutionAndPrecedence(t *testing.T) {
 	}
 }
 
+func TestLegacyHomePinDoesNotOverrideGlobalSelection(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	a := fixture(t)
+	ready(t, a, "work")
+	if err := atomicWrite(filepath.Join(home, projectAccountFile), []byte("work\n")); err != nil {
+		t.Fatal(err)
+	}
+	nested := filepath.Join(home, "projects", "example")
+	if err := os.MkdirAll(nested, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if selection, found, err := a.projectSelection(nested); err != nil || found {
+		t.Fatal("legacy home pin still shadows the global selection", selection, found, err)
+	}
+	if got, err := a.accountForDirectory(nested); err != nil || got != "default" {
+		t.Fatal("global selection was not used", got, err)
+	}
+}
+
 func TestProjectAccountExclusionSupportsLinkedWorktreeMetadata(t *testing.T) {
 	common := t.TempDir()
 	gitDir := filepath.Join(common, "worktrees", "example")

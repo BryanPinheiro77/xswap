@@ -14,6 +14,8 @@ tags; unreleased work stays in this section until a release is prepared.
   integration…** in the panel. Unix installation now manages an idempotent
   shell configuration block, and Windows keeps its wrapper directory first in
   the user `PATH`.
+- Ignore legacy account pins at the user home so they cannot shadow every
+  global **Switch account…** selection.
 
 ## v0.5.1 — 2026-09-19
 

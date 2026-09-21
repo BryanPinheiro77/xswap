@@ -164,6 +164,12 @@ func (a *App) projectSelection(start string) (projectSelection, bool, error) {
 		current = filepath.Dir(current)
 	}
 	for {
+		// Project pins are intentionally narrower than the global account. Older
+		// XSwap builds could leave a pin at the home directory, which otherwise
+		// shadows every later global switch.
+		if isHomeScope(current) || filepath.Dir(current) == current {
+			return projectSelection{}, false, nil
+		}
 		path := filepath.Join(current, projectAccountFile)
 		info, statErr := os.Lstat(path)
 		if statErr == nil {
@@ -196,11 +202,7 @@ func (a *App) projectSelection(start string) (projectSelection, bool, error) {
 		if !os.IsNotExist(statErr) {
 			return projectSelection{}, false, statErr
 		}
-		parent := filepath.Dir(current)
-		if parent == current {
-			return projectSelection{}, false, nil
-		}
-		current = parent
+		current = filepath.Dir(current)
 	}
 }
 
