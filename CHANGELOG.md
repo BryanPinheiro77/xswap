@@ -5,6 +5,8 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ## Unreleased
 
+## v0.5.2 — 2026-09-21
+
 ### Fixed
 
 - Keep the XSwap `codex` wrapper in a private command directory that precedes
