@@ -61,6 +61,12 @@ Choose **Continue sessions with another account…** in the panel, or run
    destination copies that will be archived, and number
    of open managed sessions that will restart, then confirm with `Enter` or `y`.
 
+Conversation titles prefer the first real user request and skip injected
+environment and AGENTS.md instructions. An agent session with no request of its
+own shows **Agent ·** followed by its parent conversation's request when the
+parent is present in the same account. Otherwise it shows **Agent session**;
+the date and source account remain visible to help distinguish it.
+
 A divergent conversation never blocks compatible conversations in the same
 project or Home scope. Deselect the conflict to leave all its copies untouched.
 If it stays selected, XSwap will not continue until a source account is chosen.

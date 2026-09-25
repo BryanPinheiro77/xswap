@@ -5,6 +5,12 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ## Unreleased
 
+### Fixed
+
+- Skip both AGENTS.md instruction header variants when naming conversations,
+  and label technical-only agent sessions from their parent conversation when
+  available, with an explicit agent fallback otherwise.
+
 ## v0.5.4 — 2026-09-25
 
 ### Fixed

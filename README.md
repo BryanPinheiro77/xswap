@@ -105,7 +105,10 @@ it first lists only existing projects found in Codex session metadata; XSwap doe
 not scan every directory on the computer. Each row counts unique conversations
 across every registered account. After choosing a project, the session picker
 shows that complete deduplicated list and identifies each conversation's source
-account. Every conversation is selected initially. Use `Space` to toggle one conversation, `a`
+account. Titles prefer the first real user request; an agent session without one
+shows its parent conversation's request when that parent is available in the
+same account, or **Agent session** otherwise. Every conversation is selected
+initially. Use `Space` to toggle one conversation, `a`
 to select or clear all. If a conversation changed independently in multiple
 accounts, the picker marks it as diverged. Deselect it to continue with the
 other conversations, or press `Enter` and explicitly choose which account's
