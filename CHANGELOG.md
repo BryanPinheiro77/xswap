@@ -5,6 +5,8 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ## Unreleased
 
+## v0.5.5 — 2026-09-25
+
 ### Fixed
 
 - Skip both AGENTS.md instruction header variants when naming conversations,
