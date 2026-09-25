@@ -315,11 +315,15 @@ func (p *Panel) projectLines() ([]string, int) {
 func sessionTitle(session codexSession, project string) string {
 	title := strings.Join(strings.Fields(session.Preview), " ")
 	if title == "" {
-		location := filepath.Base(project)
-		if relative, err := filepath.Rel(project, session.CWD); err == nil && relative != "." && !strings.HasPrefix(relative, "..") {
-			location = relative
+		if session.ParentID != "" {
+			title = "Agent session"
+		} else {
+			location := filepath.Base(project)
+			if relative, err := filepath.Rel(project, session.CWD); err == nil && relative != "." && !strings.HasPrefix(relative, "..") {
+				location = relative
+			}
+			title = "Conversation in " + location
 		}
-		title = "Conversation in " + location
 	}
 	if runes := []rune(title); len(runes) > 72 {
 		title = string(runes[:71]) + "…"
