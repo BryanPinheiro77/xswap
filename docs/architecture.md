@@ -72,11 +72,13 @@ snapshot, and leaves it for manual resume; the user must close the source before
 sending another message in the destination copy.
 
 For `codex resume` without an explicit UUID, the supervisor records the active
-writer locks before launching Codex. The planner associates and persists a
-single newly active conversation. Multiple possible matches remain supervised
-but unidentified, are labeled as awaiting identification, and cannot enter a
-handoff until the association becomes unambiguous. This prevents automatic
-restart from guessing between active histories.
+writer locks before launching Codex and polls while the child is running. As
+soon as exactly one new active conversation appears, it persists that identity;
+later sessions cannot make the association ambiguous. Multiple possible matches
+remain supervised but unidentified. The planner never assigns one to the
+supervisor by inference: a selected candidate follows the unmanaged-session
+path, which copies a confirmed snapshot and requires manual resume after the
+source process closes.
 
 The panel derives its home-screen project picker only from working directories
 stored in Codex session metadata across registered profiles. It resolves Git

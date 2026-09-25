@@ -71,6 +71,8 @@ type projectHandoffResult struct {
 
 var errSessionDiverged = errors.New("session histories diverged")
 
+const resumeIdentificationPollInterval = 250 * time.Millisecond
+
 func (a *App) managedPath(pid int) string {
 	return filepath.Join(a.Root, "running", strconv.Itoa(pid)+".json")
 }
@@ -128,6 +130,61 @@ func (a *App) activeSessionsInProject(home, project string) ([]string, error) {
 	}
 	sort.Strings(active)
 	return active, nil
+}
+
+func (a *App) identifyAwaitingSession(record managedCodex) (bool, error) {
+	if !record.AwaitingSession || record.SessionID != "" {
+		return false, nil
+	}
+	home, err := a.require(record.Account)
+	if err != nil {
+		return false, err
+	}
+	sessions, err := sessionsInProject(home, record.Project)
+	if err != nil {
+		return false, err
+	}
+	prior := stringSliceSet(record.ActiveBeforeResume)
+	candidates := []codexSession{}
+	for _, session := range sessions {
+		if prior[session.ID] {
+			continue
+		}
+		open, openErr := a.sessionIsOpen(home, session.ID)
+		if openErr != nil {
+			return false, openErr
+		}
+		if open {
+			candidates = append(candidates, session)
+		}
+	}
+	if len(candidates) != 1 {
+		return false, nil
+	}
+	record.SessionID = candidates[0].ID
+	record.SessionPath = candidates[0].Path
+	record.AwaitingSession = false
+	record.ActiveBeforeResume = nil
+	if err = a.writeManaged(record); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (a *App) trackAwaitingSession(ctx context.Context, record managedCodex) {
+	ticker := time.NewTicker(resumeIdentificationPollInterval)
+	defer ticker.Stop()
+	for {
+		identified, _ := a.identifyAwaitingSession(record)
+		if identified {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
 }
 
 func findSessionByID(sessions []codexSession, id string) (codexSession, bool) {
@@ -248,7 +305,19 @@ func (a *App) superviseCodex(initialAccount string, initialArgs []string) error 
 			_ = cmd.Wait()
 			return commandErr
 		}
+		identificationDone := make(chan struct{})
+		identificationCtx, stopIdentification := context.WithCancel(context.Background())
+		if awaitingSession {
+			go func() {
+				defer close(identificationDone)
+				a.trackAwaitingSession(identificationCtx, record)
+			}()
+		} else {
+			close(identificationDone)
+		}
 		waitErr := cmd.Wait()
+		stopIdentification()
+		<-identificationDone
 		request, requested, requestErr := a.readHandoff(supervisorPID)
 		if requestErr != nil {
 			return requestErr
@@ -765,14 +834,6 @@ func conflictingManagedCopy(plan projectHandoffPlan) error {
 	return nil
 }
 
-func awaitingIdentificationError(project string, sessions []codexSession) error {
-	titles := make([]string, 0, len(sessions))
-	for _, session := range sessions {
-		titles = append(titles, sessionTitle(session, project))
-	}
-	return fmt.Errorf("supervised session identity is still ambiguous: %s; wait for identification or reopen it with an explicit codex resume session ID", strings.Join(titles, "; "))
-}
-
 func classifyOpenUnmanaged(plan projectHandoffPlan) (manual, conflicts []codexSession) {
 	manualIDs := map[string]bool{}
 	conflictKeys := map[string]bool{}
@@ -833,7 +894,18 @@ func (a *App) planResolvedProjectHandoff(directory, target string, selected map[
 		return projectHandoffPlan{}, err
 	}
 	if len(plan.Awaiting) > 0 {
-		return projectHandoffPlan{}, awaitingIdentificationError(plan.Project, plan.Awaiting)
+		manual := map[string]bool{}
+		for _, session := range plan.Unmanaged {
+			manual[managedSessionKey(session.Account, session.ID)] = true
+		}
+		for _, session := range plan.Awaiting {
+			key := managedSessionKey(session.Account, session.ID)
+			if !manual[key] {
+				plan.Unmanaged = append(plan.Unmanaged, session)
+				manual[key] = true
+			}
+		}
+		plan.Awaiting = nil
 	}
 	moves := false
 	for _, session := range plan.Sessions {
