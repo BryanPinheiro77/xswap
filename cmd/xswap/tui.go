@@ -346,7 +346,7 @@ func (p *Panel) sessionLines(a *App) ([]string, int) {
 		if p.HandoffRunning[session.ID] {
 			meta += "  ·  running"
 		} else if p.HandoffAwaiting[session.ID] {
-			meta += "  ·  supervised · awaiting identification"
+			meta += "  ·  supervised · manual resume if transferred"
 		} else if p.HandoffUnmanaged[session.ID] {
 			meta += "  ·  open outside XSwap"
 		}

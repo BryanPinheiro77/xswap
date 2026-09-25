@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -54,16 +55,41 @@ func TestIdentifyManagedSession(t *testing.T) {
 	}
 }
 
-func TestInteractiveResumeResolvesNewActiveWriterAndPersistsSession(t *testing.T) {
+func TestInteractiveResumePersistsIdentityBeforeLaterSessionsStart(t *testing.T) {
 	a := fixture(t)
 	ready(t, a, "work")
 	project := t.TempDir()
 	oldID := "24242424-2424-4424-8424-242424242424"
 	selectedID := "25252525-2525-4525-8525-252525252525"
+	laterID := "28282828-2828-4828-8828-282828282828"
 	writeTestSession(t, a.DefaultHome, "2026/09/17", oldID, project, "already open")
 	selectedPath := writeTestSession(t, a.DefaultHome, "2026/09/18", selectedID, project, "selected in resume picker")
+	selectedActive := make(chan struct{})
+	laterActive := make(chan struct{})
 	a.SessionActive = func(home, id string) (bool, error) {
-		return home == a.DefaultHome && (id == oldID || id == selectedID), nil
+		if home != a.DefaultHome {
+			return false, nil
+		}
+		switch id {
+		case oldID:
+			return true, nil
+		case selectedID:
+			select {
+			case <-selectedActive:
+				return true, nil
+			default:
+				return false, nil
+			}
+		case laterID:
+			select {
+			case <-laterActive:
+				return true, nil
+			default:
+				return false, nil
+			}
+		default:
+			return false, nil
+		}
 	}
 	record := managedCodex{
 		SupervisorPID:      os.Getpid(),
@@ -78,15 +104,42 @@ func TestInteractiveResumeResolvesNewActiveWriterAndPersistsSession(t *testing.T
 	if err := a.writeManaged(record); err != nil {
 		t.Fatal(err)
 	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		a.trackAwaitingSession(ctx, record)
+		close(done)
+	}()
+	close(selectedActive)
+	deadline := time.Now().Add(2 * time.Second)
+	var persisted managedCodex
+	for {
+		candidate := managedCodex{}
+		if err := readJSON(a.managedPath(os.Getpid()), &candidate); err == nil && candidate.SessionID == selectedID {
+			persisted = candidate
+			break
+		}
+		if time.Now().After(deadline) {
+			cancel()
+			<-done
+			t.Fatal("interactive resume identity was not persisted while it was unambiguous")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancel()
+	<-done
+	writeTestSession(t, a.DefaultHome, "2026/09/19", laterID, project, "opened later")
+	close(laterActive)
+
 	plan, err := a.projectHandoffSource(project)
-	if err != nil || len(plan.Managed) != 1 || plan.Managed[0].SessionID != selectedID || len(plan.Awaiting) != 0 || len(plan.Unmanaged) != 1 {
+	if err != nil || len(plan.Managed) != 1 || plan.Managed[0].SessionID != selectedID || len(plan.Awaiting) != 0 || len(plan.Unmanaged) != 2 {
 		t.Fatal("interactive resume was not resolved safely", plan, err)
 	}
 	handoff, err := a.planSelectedProjectHandoff(project, "work", map[string]bool{selectedID: true})
 	if err != nil || len(handoff.Managed) != 1 || handoff.Managed[0].SessionID != selectedID || len(handoff.Unmanaged) != 0 {
 		t.Fatal("resolved resume was not prepared for automatic handoff", handoff, err)
 	}
-	var persisted managedCodex
+	persisted = managedCodex{}
 	if err = readJSON(a.managedPath(os.Getpid()), &persisted); err != nil {
 		t.Fatal(err)
 	}
@@ -95,9 +148,10 @@ func TestInteractiveResumeResolvesNewActiveWriterAndPersistsSession(t *testing.T
 	}
 }
 
-func TestInteractiveResumeKeepsAmbiguousWritersAwaitingIdentification(t *testing.T) {
+func TestInteractiveResumeDoesNotGuessAmbiguousWriters(t *testing.T) {
 	a := fixture(t)
 	ready(t, a, "work")
+	a.SessionIndexer = func(string, string) error { return nil }
 	project := t.TempDir()
 	firstID := "26262626-2626-4626-8626-262626262626"
 	secondID := "27272727-2727-4727-8727-272727272727"
@@ -118,11 +172,23 @@ func TestInteractiveResumeKeepsAmbiguousWritersAwaitingIdentification(t *testing
 	p.useHandoffPlan(plan)
 	lines, _ := p.sessionLines(a)
 	view := stripANSI(strings.Join(lines, "\n"))
-	if !strings.Contains(view, "supervised · awaiting identification") || strings.Contains(view, "open outside XSwap") {
+	if !strings.Contains(view, "supervised · manual resume if transferred") || strings.Contains(view, "open outside XSwap") {
 		t.Fatalf("ambiguous supervised sessions had the wrong status:\n%s", view)
 	}
-	if _, err = a.planSelectedProjectHandoff(project, "work", map[string]bool{firstID: true}); err == nil || !strings.Contains(err.Error(), "identity is still ambiguous") {
-		t.Fatal("handoff guessed an ambiguous supervised session", err)
+	handoff, err := a.planSelectedProjectHandoff(project, "work", map[string]bool{firstID: true})
+	if err != nil || len(handoff.Managed) != 0 || len(handoff.Awaiting) != 0 || len(handoff.Unmanaged) != 1 || handoff.Unmanaged[0].ID != firstID {
+		t.Fatal("ambiguous supervised session was not prepared for manual resume", handoff, err)
+	}
+	result, err := a.requestProjectHandoff(handoff)
+	if err != nil || result.Copied != 1 || result.Restarted != 0 || len(result.Manual) != 1 || result.Manual[0].ID != firstID {
+		t.Fatal("ambiguous supervised session was not copied safely", result, err)
+	}
+	var persisted managedCodex
+	if err = readJSON(a.managedPath(os.Getpid()), &persisted); err != nil {
+		t.Fatal(err)
+	}
+	if persisted.SessionID != "" || !persisted.AwaitingSession {
+		t.Fatal("ambiguous supervisor was assigned a guessed conversation", persisted)
 	}
 }
 
