@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -104,6 +105,79 @@ func TestAtomicWritesAndLockFailuresPreserveData(t *testing.T) {
 	unlock()
 	if _, err := a.lock(context.Background(), "value/child.lock"); err == nil {
 		t.Fatal("lock accepted file parent")
+	}
+}
+
+func TestLockRecoversAbandonedOwnersAndLegacyDirectories(t *testing.T) {
+	a := fixture(t)
+	if err := os.MkdirAll(a.Root, 0700); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name  string
+		owner string
+		age   time.Duration
+	}{
+		{name: "dead-owner", owner: "99999999", age: 3 * time.Second},
+		{name: "legacy-empty", age: 25 * time.Hour},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(a.Root, tc.name+".lockdir")
+			if err := os.Mkdir(path, 0700); err != nil {
+				t.Fatal(err)
+			}
+			if tc.owner != "" {
+				if err := os.WriteFile(filepath.Join(path, "owner"), []byte(tc.owner), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			old := time.Now().Add(-tc.age)
+			if err := os.Chtimes(path, old, old); err != nil {
+				t.Fatal(err)
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			unlock, err := a.lock(ctx, tc.name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, err := os.ReadFile(filepath.Join(path, "owner"))
+			if err != nil || string(data) != strconv.Itoa(os.Getpid()) {
+				t.Fatal("recovered lock has no current owner", err)
+			}
+			unlock()
+			if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+				t.Fatal("lock directory remained after unlock", err)
+			}
+		})
+	}
+}
+
+func TestLockDoesNotReclaimLiveOwner(t *testing.T) {
+	a := fixture(t)
+	if err := os.MkdirAll(a.Root, 0700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(a.Root, "live.lockdir")
+	if err := os.Mkdir(path, 0700); err != nil {
+		t.Fatal(err)
+	}
+	owner := strconv.Itoa(os.Getpid())
+	if err := os.WriteFile(filepath.Join(path, "owner"), []byte(owner), 0600); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-25 * time.Hour)
+	if err := os.Chtimes(path, old, old); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 80*time.Millisecond)
+	defer cancel()
+	if _, err := a.lock(ctx, "live"); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatal("reclaimed a live owner's lock", err)
+	}
+	data, err := os.ReadFile(filepath.Join(path, "owner"))
+	if err != nil || string(data) != owner {
+		t.Fatal("changed a live owner's lock", err)
 	}
 }
 

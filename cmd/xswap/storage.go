@@ -210,10 +210,21 @@ func (a *App) lock(ctx context.Context, name string) (func(), error) {
 	for {
 		err := os.Mkdir(lockPath, 0700)
 		if err == nil {
-			return func() { _ = os.Remove(lockPath) }, nil
+			owner := filepath.Join(lockPath, "owner")
+			if err := os.WriteFile(owner, []byte(strconv.Itoa(os.Getpid())), 0600); err != nil {
+				_ = os.Remove(lockPath)
+				return nil, err
+			}
+			return func() {
+				_ = os.Remove(owner)
+				_ = os.Remove(lockPath)
+			}, nil
 		}
 		if !errors.Is(err, os.ErrExist) {
 			return nil, err
+		}
+		if reclaimAbandonedLock(lockPath) {
+			continue
 		}
 		select {
 		case <-ctx.Done():
@@ -221,6 +232,51 @@ func (a *App) lock(ctx context.Context, name string) (func(), error) {
 		case <-time.After(50 * time.Millisecond):
 		}
 	}
+}
+
+func reclaimAbandonedLock(lockPath string) bool {
+	info, err := os.Stat(lockPath)
+	if err != nil || !info.IsDir() || time.Since(info.ModTime()) < 2*time.Second {
+		return false
+	}
+	owner := filepath.Join(lockPath, "owner")
+	data, err := os.ReadFile(owner)
+	pid, parseErr := strconv.Atoi(string(data))
+	legacy := err != nil || parseErr != nil || pid <= 0
+	if legacy && time.Since(info.ModTime()) < 24*time.Hour {
+		return false
+	}
+	if !legacy && managedProcessAlive(pid) {
+		return false
+	}
+	reaper := filepath.Join(lockPath, "reaper")
+	if os.Mkdir(reaper, 0700) != nil {
+		return false
+	}
+	claimed := true
+	defer func() {
+		if claimed {
+			_ = os.Remove(reaper)
+		}
+	}()
+	// Recheck after claiming the directory: another contender may have recovered it.
+	current, err := os.Stat(lockPath)
+	if err != nil || !os.SameFile(info, current) {
+		return false
+	}
+	data, err = os.ReadFile(owner)
+	pid, parseErr = strconv.Atoi(string(data))
+	if err == nil && parseErr == nil && pid > 0 && managedProcessAlive(pid) {
+		return false
+	}
+	if err == nil && os.Remove(owner) != nil {
+		return false
+	}
+	if os.Remove(reaper) != nil {
+		return false
+	}
+	claimed = false
+	return os.Remove(lockPath) == nil
 }
 func (a *App) withState(fn func() error) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

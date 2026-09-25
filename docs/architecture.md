@@ -116,6 +116,9 @@ initialize handshake, reads account identity, and calls
 `account/rateLimits/read`. It does not start a thread or send a prompt.
 The request context bounds lock wait and query duration. Cancellation terminates
 the whole app-server process group and waits for cleanup.
+Lock directories record the owning process. A dead owner's lock can be recovered
+after a short grace period; empty legacy lock directories are recovered after
+24 hours. Live owners keep their locks even when the directory is old.
 
 Quota responses are accepted only when they contain complete, finite usage
 windows. A hollow or partial response retains the last valid in-memory reading
