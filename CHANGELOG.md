@@ -11,6 +11,12 @@ tags; unreleased work stays in this section until a release is prepared.
 
 - Recover abandoned account lock directories so a previous XSwap crash cannot
   permanently hide quota readings behind `context deadline exceeded`.
+- Persist the conversation selected through an interactive `codex resume`
+  picker as soon as it becomes active, before later sessions can make its
+  supervisor association ambiguous.
+- Copy a selected conversation safely for manual resume when several active
+  conversations genuinely match an unidentified supervisor, without guessing
+  which Codex process to stop or restart.
 
 ## v0.5.2 — 2026-09-21
 

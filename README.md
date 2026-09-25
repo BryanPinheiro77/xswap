@@ -124,10 +124,12 @@ conversations are left alone.
 
 When `codex resume` opens Codex's own conversation picker, XSwap tracks which
 writer locks were active before the picker started. A single newly active
-conversation is attached to its supervisor and can restart automatically during
-a later handoff. If several conversations become possible matches, the panel
-shows **supervised · awaiting identification** and refuses to guess; reopen the
-conversation with an explicit session ID or close the other active candidates.
+conversation is attached to its supervisor immediately and can restart
+automatically during a later handoff, even if other conversations are opened
+afterward. If several conversations are already possible matches, XSwap refuses
+to guess which process owns one. The selected conversation can still be copied,
+but the panel marks it **supervised · manual resume if transferred**; close its
+old process and use `codex resume` with the destination account.
 
 Project selection is stored in `.xswap-account` at the repository root; the
 nearest file wins in nested directories. XSwap adds it to the repository's

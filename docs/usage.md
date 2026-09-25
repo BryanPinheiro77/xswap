@@ -104,11 +104,12 @@ resumed through the wrapper, future handoffs can restart them automatically.
 
 An interactive `codex resume` command does not reveal the selected conversation
 ID to its wrapper before Codex opens the picker. XSwap records the project's
-active writer locks before launch and attaches the one newly active conversation
-to that supervisor. If more than one conversation could match, the picker labels
-them **supervised · awaiting identification** and the handoff stops instead of
-guessing. Reopen the intended conversation with an explicit session ID, or close
-the other active candidates, to make the association unambiguous.
+active writer locks before launch and immediately persists the one newly active
+conversation against that supervisor. Conversations opened later therefore do
+not make an already identified process ambiguous. If more than one conversation
+could match before identification, XSwap does not guess. A selected candidate is
+copied safely and labeled **supervised · manual resume if transferred**; close
+the old process and run `codex resume` with the destination account.
 
 The noninteractive `xswap project switch NAME` command selects every conversation
 in the project because it has no interactive session picker.
