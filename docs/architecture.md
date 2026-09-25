@@ -85,6 +85,9 @@ stored in Codex session metadata across registered profiles. It resolves Git
 roots, ignores missing directories, deduplicates copied conversation IDs, and
 orders projects by recent session activity. Opening the panel inside a project
 skips this discovery step and opens that project's conversations directly.
+Session titles scan a bounded rollout prefix for the first real user request.
+An agent without one uses `parent_thread_id` to find a parent's request inside
+the same profile; missing parents and cycles use an explicit agent label.
 Conversation IDs copied between profiles are deduplicated; the longest compatible
 history is used, active managed copies take precedence when safe, and divergent
 copies become per-conversation conflicts. The panel can omit a conflict or

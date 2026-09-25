@@ -19,13 +19,14 @@ import (
 var sessionIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 type codexSession struct {
-	ID      string
-	Account string
-	CWD     string
-	Path    string
-	Preview string
-	Created time.Time
-	Updated time.Time
+	ID       string
+	ParentID string
+	Account  string
+	CWD      string
+	Path     string
+	Preview  string
+	Created  time.Time
+	Updated  time.Time
 }
 
 type sessionEnvelope struct {
@@ -34,10 +35,11 @@ type sessionEnvelope struct {
 }
 
 type sessionMeta struct {
-	ID        string `json:"id"`
-	SessionID string `json:"session_id"`
-	CWD       string `json:"cwd"`
-	Timestamp string `json:"timestamp"`
+	ID             string `json:"id"`
+	SessionID      string `json:"session_id"`
+	ParentThreadID string `json:"parent_thread_id"`
+	CWD            string `json:"cwd"`
+	Timestamp      string `json:"timestamp"`
 }
 
 func previewFromEnvelope(line []byte) string {
@@ -85,13 +87,17 @@ func userSessionPreview(message string) string {
 		"<apps_instructions>",
 		"<plugins_instructions>",
 		"<turn_aborted>",
-		"# AGENTS.md instructions for ",
 		"The following is the Codex agent history",
 	}
 	for _, prefix := range technicalPrefixes {
 		if strings.HasPrefix(message, prefix) {
 			return ""
 		}
+	}
+	firstLine, _, _ := strings.Cut(message, "\n")
+	firstLine = strings.TrimSpace(firstLine)
+	if firstLine == "# AGENTS.md instructions" || strings.HasPrefix(firstLine, "# AGENTS.md instructions for ") {
+		return ""
 	}
 	return message
 }
@@ -148,6 +154,7 @@ func readSession(path string) (codexSession, error) {
 		created = info.ModTime()
 	}
 	preview := ""
+	parentID := strings.ToLower(strings.TrimSpace(metadata.ParentThreadID))
 	// Initial instructions can precede the first user message. Scan a bounded
 	// local prefix so the picker can show a useful title without loading a whole
 	// conversation into memory.
@@ -162,7 +169,49 @@ func readSession(path string) (codexSession, error) {
 			break
 		}
 	}
-	return codexSession{ID: strings.ToLower(id), CWD: filepath.Clean(metadata.CWD), Path: path, Preview: preview, Created: created, Updated: info.ModTime()}, nil
+	return codexSession{ID: strings.ToLower(id), ParentID: parentID, CWD: filepath.Clean(metadata.CWD), Path: path, Preview: preview, Created: created, Updated: info.ModTime()}, nil
+}
+
+func agentSessionPreviews(sessions map[string]codexSession) {
+	resolved := map[string]string{}
+	visiting := map[string]bool{}
+	var promptFromParent func(string) string
+	promptFromParent = func(id string) string {
+		if prompt, ok := resolved[id]; ok {
+			return prompt
+		}
+		if visiting[id] {
+			return ""
+		}
+		session, ok := sessions[id]
+		if !ok {
+			return ""
+		}
+		visiting[id] = true
+		prompt := session.Preview
+		if prompt == "" && session.ParentID != "" {
+			prompt = promptFromParent(session.ParentID)
+		}
+		delete(visiting, id)
+		resolved[id] = prompt
+		return prompt
+	}
+	previews := map[string]string{}
+	for id, session := range sessions {
+		if session.Preview != "" || session.ParentID == "" {
+			continue
+		}
+		if prompt := promptFromParent(session.ParentID); prompt != "" {
+			previews[id] = "Agent · " + prompt
+		} else {
+			previews[id] = "Agent session"
+		}
+	}
+	for id, preview := range previews {
+		session := sessions[id]
+		session.Preview = preview
+		sessions[id] = session
+	}
 }
 
 func sessionsInProfile(home string) ([]codexSession, error) {
@@ -199,6 +248,7 @@ func sessionsInProfile(home string) ([]codexSession, error) {
 	if err != nil {
 		return nil, err
 	}
+	agentSessionPreviews(found)
 	sessions := make([]codexSession, 0, len(found))
 	for _, session := range found {
 		sessions = append(sessions, session)

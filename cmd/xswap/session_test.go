@@ -37,6 +37,81 @@ func TestReadSessionSkipsTechnicalContextForPreview(t *testing.T) {
 	}
 }
 
+func writeTestSessionWithParent(t *testing.T, home, id, parentID, cwd string, messages ...string) string {
+	t.Helper()
+	path := filepath.Join(home, "sessions", "2026/09/25", "rollout-"+id+".jsonl")
+	var content strings.Builder
+	fmt.Fprintf(&content, "{\"type\":\"session_meta\",\"payload\":{\"id\":%q,\"parent_thread_id\":%q,\"cwd\":%q}}\n", id, parentID, cwd)
+	for _, message := range messages {
+		fmt.Fprintf(&content, "{\"type\":\"event_msg\",\"payload\":{\"type\":\"user_message\",\"message\":%q}}\n", message)
+	}
+	if err := atomicWrite(path, []byte(content.String())); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestAgentSessionTitlesUseLocalParentAndSafeFallbacks(t *testing.T) {
+	a := fixture(t)
+	ready(t, a, "work")
+	project := t.TempDir()
+	parentID := "11111111-1111-4111-8111-111111111111"
+	agentID := "22222222-2222-4222-8222-222222222222"
+	nestedAgentID := "33333333-3333-4333-8333-333333333333"
+	missingParentID := "44444444-4444-4444-8444-444444444444"
+	technicalParentID := "55555555-5555-4555-8555-555555555555"
+	technicalChildID := "66666666-6666-4666-8666-666666666666"
+	cycleA := "77777777-7777-4777-8777-777777777777"
+	cycleB := "88888888-8888-4888-8888-888888888888"
+	userAgentID := "99999999-9999-4999-8999-999999999999"
+	selfParentID := "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+	writeTestSessionWithParent(t, a.DefaultHome, parentID, "", project, "<environment_context>injected</environment_context>", "Implement account handoff")
+	writeTestSessionWithParent(t, a.DefaultHome, agentID, strings.ToUpper(parentID), project, "# AGENTS.md instructions \r\nUse the repository rules")
+	writeTestSessionWithParent(t, a.DefaultHome, nestedAgentID, agentID, project, "# AGENTS.md instructions for /project")
+	writeTestSessionWithParent(t, a.DefaultHome, missingParentID, "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", project, "# AGENTS.md instructions")
+	writeTestSessionWithParent(t, a.DefaultHome, technicalParentID, "", project, "# AGENTS.md instructions")
+	writeTestSessionWithParent(t, a.DefaultHome, technicalChildID, technicalParentID, project, "# AGENTS.md instructions")
+	writeTestSessionWithParent(t, a.DefaultHome, cycleA, cycleB, project, "# AGENTS.md instructions")
+	writeTestSessionWithParent(t, a.DefaultHome, cycleB, cycleA, project, "# AGENTS.md instructions")
+	writeTestSessionWithParent(t, a.DefaultHome, userAgentID, parentID, project, "# AGENTS.md instructions", "Investigate quota refresh")
+	writeTestSessionWithParent(t, a.DefaultHome, selfParentID, selfParentID, project, "# AGENTS.md instructions")
+
+	sessions, err := sessionsInProject(a.DefaultHome, project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	titles := map[string]string{}
+	for _, session := range sessions {
+		titles[session.ID] = sessionTitle(session, project)
+	}
+	for id, want := range map[string]string{
+		parentID:          "Implement account handoff",
+		agentID:           "Agent · Implement account handoff",
+		nestedAgentID:     "Agent · Implement account handoff",
+		missingParentID:   "Agent session",
+		technicalChildID:  "Agent session",
+		cycleA:            "Agent session",
+		cycleB:            "Agent session",
+		userAgentID:       "Investigate quota refresh",
+		selfParentID:      "Agent session",
+		technicalParentID: "Conversation in " + filepath.Base(project),
+	} {
+		if titles[id] != want {
+			t.Errorf("title for %s = %q, want %q", id, titles[id], want)
+		}
+	}
+
+	workHome, err := a.require("work")
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeTestSessionWithParent(t, workHome, agentID, parentID, project, "# AGENTS.md instructions")
+	copied, err := sessionsInProject(workHome, project)
+	if err != nil || len(copied) != 1 || sessionTitle(copied[0], project) != "Agent session" {
+		t.Fatal("copied agent without its parent should keep an explicit fallback", copied, err)
+	}
+}
+
 func TestSessionsInProjectAndTransfer(t *testing.T) {
 	a := fixture(t)
 	ready(t, a, "work")
