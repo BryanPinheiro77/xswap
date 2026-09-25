@@ -5,6 +5,13 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ## Unreleased
 
+## v0.5.3 — 2026-09-25
+
+### Fixed
+
+- Recover abandoned account lock directories so a previous XSwap crash cannot
+  permanently hide quota readings behind `context deadline exceeded`.
+
 ## v0.5.2 — 2026-09-21
 
 ### Fixed
