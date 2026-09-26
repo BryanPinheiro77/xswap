@@ -12,6 +12,7 @@ in `.github/` and longer guides in `docs/`.
 | File in `cmd/xswap/` | Responsibility |
 | --- | --- |
 | `main.go` | CLI commands, installation, and wrapper restoration |
+| `doctor.go`, `doctor_unix.go`, `doctor_windows.go` | Read-only, offline installation and manager diagnostics |
 | `storage.go` | Profiles, config, private atomic writes, and file locks |
 | `rpc.go` | Official Codex process execution and app-server quota queries |
 | `auto.go` | Background monitor, quota scoring, and rotation decisions |

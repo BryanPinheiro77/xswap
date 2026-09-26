@@ -14,6 +14,8 @@ used by newly launched Codex processes.
 - Project-local account selection and confirmed conversation handoff between accounts.
 - Live quota watching through the official Codex app server.
 - Opt-in background auto-switch with fresh-quota checks and a cooldown.
+- Offline `xswap doctor` diagnostics for CLI integration, profiles, settings,
+  and monitor health.
 - Enable/disable controls and account removal with local archival.
 - One Go executable, with no Python or third-party Go runtime dependencies.
 
@@ -89,6 +91,7 @@ xswap project switch work      # Copy project conversations and resume managed s
 xswap watch                   # Watch every account
 xswap limits --all            # One-time quota query
 xswap run default -- --version
+xswap doctor                  # Check installation and account-manager health
 ```
 
 No prior login or logout is needed: `add` logs in directly inside a new profile.
@@ -215,6 +218,10 @@ xswap version
 ```
 
 Tests use temporary homes and a fake app server, not real credentials.
+`xswap doctor` works offline and returns exit code 0 when healthy, 1 when it
+finds warnings, and 2 when a required component fails. It does not change
+account selection or settings and never prints credentials, prompt history, or
+quota payloads.
 
 - [Usage](docs/usage.md)
 - [Architecture](docs/architecture.md)
