@@ -5,6 +5,8 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ## Unreleased
 
+## v0.6.0 — 2026-09-26
+
 ### Added
 
 - Add offline `xswap doctor` diagnostics for Codex CLI integration, wrapper
