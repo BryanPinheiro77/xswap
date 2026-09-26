@@ -5,6 +5,12 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ## Unreleased
 
+### Added
+
+- Add offline `xswap doctor` diagnostics for Codex CLI integration, wrapper
+  health, account profiles, settings, manager directory permissions, and the
+  auto-switch monitor, with remediation guidance and distinct exit codes.
+
 ## v0.5.5 — 2026-09-25
 
 ### Fixed

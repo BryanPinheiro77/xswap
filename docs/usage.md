@@ -219,6 +219,20 @@ On Windows, the installer similarly keeps `%LOCALAPPDATA%\XSwap\bin` first in
 the user `PATH`. `xswap uninstall` stops auto-switch and removes this integration
 without deleting account data or the official CLI.
 
+## Diagnose installation problems
+
+Run `xswap doctor` for an offline check of the XSwap version and platform,
+saved official Codex CLI path, command wrappers, `CODEX_HOME` precedence, manager
+directory access, pending named-account logins, settings validity, and
+auto-switch monitor health. Warnings and failures include a suggested next
+step. The command does not change account selection or settings and does not
+read or print credential contents, conversation history, or quota responses.
+
+The exit code is `0` when all checks pass, `1` when the report contains
+warnings, and `2` when a required component fails. For example, a missing Codex
+CLI suggests installing it and running `xswap install`; a pending profile
+suggests `xswap login NAME`.
+
 ## Updating
 
 Use `xswap version` for the installed version, `xswap update --check` for a fresh

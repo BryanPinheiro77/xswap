@@ -28,6 +28,10 @@ func main() {
 		err = a.run(os.Args[1:])
 	}
 	if err != nil {
+		var coded interface{ ExitCode() int }
+		if errors.As(err, &coded) {
+			os.Exit(coded.ExitCode())
+		}
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
 			code := exitErr.ExitCode()
@@ -74,6 +78,7 @@ func usage() {
   xswap install                 Install or repair command wrappers
   xswap uninstall               Restore the original Codex command
   xswap version                 Show version, commit, and build date
+  xswap doctor                  Diagnose XSwap installation and account setup
   xswap update --check          Check published GitHub releases
   xswap update                  Install the latest update after confirmation
 
@@ -190,6 +195,14 @@ func (a *App) run(args []string) error {
 		fmt.Printf("XSwap %s\nCommit: %s\nBuilt: %s\n", version, commit, buildDate)
 		if a.PackageManager == "homebrew" {
 			fmt.Println("Managed by: Homebrew")
+		}
+		return nil
+	case "doctor":
+		if len(o.Names) > 0 || len(o.Values) > 0 || len(o.Flags) > 0 {
+			return errors.New("usage: xswap doctor")
+		}
+		if code := a.doctor(os.Stdout); code != 0 {
+			return doctorExitError(code)
 		}
 		return nil
 	case "install":
