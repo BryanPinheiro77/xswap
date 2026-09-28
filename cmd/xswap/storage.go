@@ -63,6 +63,8 @@ func newApp() *App {
 
 var validName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$`)
 
+const profileMarker = ".xswap-profile"
+
 func validate(name string) error {
 	if !validName.MatchString(name) {
 		return errors.New("invalid account name: use up to 64 letters, numbers, dots, _ or -")
@@ -85,12 +87,34 @@ func (a *App) require(name string) (string, error) {
 		return "", err
 	}
 	if name != "default" {
-		info, err := os.Stat(path)
-		if err != nil || !info.IsDir() {
+		if !registeredProfile(path) {
 			return "", fmt.Errorf("account %q is not registered; run: xswap add %s", name, name)
 		}
 	}
 	return path, nil
+}
+
+// registeredProfile recognizes current XSwap profiles and legacy profiles that
+// predate the marker. Codex may recreate an old CODEX_HOME directory after its
+// account was removed; that directory must not become a registered account.
+func registeredProfile(path string) bool {
+	info, err := os.Lstat(path)
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return false
+	}
+	if regularFile(filepath.Join(path, profileMarker)) {
+		return true
+	}
+	if regularFile(filepath.Join(path, "auth.json")) || regularFile(filepath.Join(path, "config.toml")) {
+		return true
+	}
+	info, err = os.Lstat(filepath.Join(path, "skills"))
+	return err == nil && info.Mode()&os.ModeSymlink != 0
+}
+
+func regularFile(path string) bool {
+	info, err := os.Lstat(path)
+	return err == nil && info.Mode().IsRegular()
 }
 func (a *App) selected() string {
 	data, err := os.ReadFile(filepath.Join(a.Root, "active"))
@@ -292,7 +316,7 @@ func (a *App) names() []string {
 	names := []string{"default"}
 	entries, _ := os.ReadDir(filepath.Join(a.Root, "profiles"))
 	for _, entry := range entries {
-		if entry.IsDir() && validate(entry.Name()) == nil {
+		if validate(entry.Name()) == nil && registeredProfile(filepath.Join(a.Root, "profiles", entry.Name())) {
 			names = append(names, entry.Name())
 		}
 	}
@@ -348,8 +372,28 @@ func (a *App) create(name string) (string, error) {
 	if err = os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return "", err
 	}
+	if info, statErr := os.Lstat(path); statErr == nil {
+		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+			return "", fmt.Errorf("account path %q exists but is not a registered profile", name)
+		}
+		if registeredProfile(path) {
+			return "", fmt.Errorf("account %q already exists; retry login with: xswap login %s", name, name)
+		}
+		archive, archiveErr := a.archivePath(name)
+		if archiveErr != nil {
+			return "", archiveErr
+		}
+		if err = os.Rename(path, archive); err != nil {
+			return "", fmt.Errorf("archive leftover data for account %q: %w", name, err)
+		}
+	} else if !errors.Is(statErr, os.ErrNotExist) {
+		return "", statErr
+	}
 	if err = os.Mkdir(path, 0700); err != nil {
 		return "", fmt.Errorf("account %q already exists or cannot be created; retry login with: xswap login %s", name, name)
+	}
+	if err = atomicWrite(filepath.Join(path, profileMarker), []byte("1\n")); err != nil {
+		return "", err
 	}
 	if config, err := os.ReadFile(filepath.Join(a.DefaultHome, "config.toml")); err == nil {
 		if err = atomicWrite(filepath.Join(path, "config.toml"), config); err != nil {
@@ -407,11 +451,10 @@ func (a *App) remove(name string) (string, error) {
 		if err != nil {
 			return err
 		}
-		directory := filepath.Join(a.Root, "removed")
-		if err = os.MkdirAll(directory, 0700); err != nil {
+		archive, err = a.archivePath(name)
+		if err != nil {
 			return err
 		}
-		archive = filepath.Join(directory, fmt.Sprintf("%s-%d", name, time.Now().UnixNano()))
 		if err = os.Rename(home, archive); err != nil {
 			return err
 		}
@@ -425,4 +468,12 @@ func (a *App) remove(name string) (string, error) {
 		return writeJSON(filepath.Join(a.Root, "settings.json"), s)
 	})
 	return archive, err
+}
+
+func (a *App) archivePath(name string) (string, error) {
+	directory := filepath.Join(a.Root, "removed")
+	if err := os.MkdirAll(directory, 0700); err != nil {
+		return "", err
+	}
+	return filepath.Join(directory, fmt.Sprintf("%s-%d", name, time.Now().UnixNano())), nil
 }

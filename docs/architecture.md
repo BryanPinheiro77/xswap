@@ -32,7 +32,10 @@ in `.github/` and longer guides in `docs/`.
 `default` refers to `~/.codex`. Each named account has a distinct home at
 `~/.codex-swap/profiles/NAME`. Creation copies the original config and links the
 skills directory; credentials, sessions, caches, and databases are not copied.
-Existing named profiles remain compatible across manager upgrades.
+New profiles carry a private XSwap registration marker. Legacy profiles remain
+recognized from their auth file, config, or shared skills link. This prevents
+Codex from re-registering a removed account if an already-running process
+recreates its old home with only runtime state.
 
 On macOS/Linux, the installer owns command symlinks in `~/.codex-swap/bin` and
 prepends that directory through a marked block in the active shell configuration.
