@@ -196,7 +196,10 @@ whole profile into `~/.codex-swap/removed/NAME-TIMESTAMP`. Credentials and histo
 are preserved there. The active account cannot be removed until another account
 is selected; `default` is protected. In scripts, `--yes` confirms removal.
 To recover an archived profile, move its directory back into `profiles` under an
-unused valid name. Archival is not permanent credential deletion.
+unused valid name. Archival is not permanent credential deletion. Runtime-only
+directories recreated by an already-running Codex process are ignored; their
+contents are preserved in place and can be archived if you explicitly add the
+same account name again.
 
 ## Configuration and upgrades
 

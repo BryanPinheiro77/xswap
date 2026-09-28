@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
@@ -231,6 +232,60 @@ func TestRemovalRejectsSymlinkProfiles(t *testing.T) {
 	}
 	if !exists(outside) {
 		t.Fatal("removed external directory")
+	}
+}
+
+func TestRemovedProfileResurrectedByCodexIsNotListedOrUsable(t *testing.T) {
+	a := fixture(t)
+	ready(t, a, "work")
+	if _, err := a.remove("work"); err != nil {
+		t.Fatal(err)
+	}
+	path, _ := a.profile("work")
+	if err := os.MkdirAll(path, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := atomicWrite(filepath.Join(path, "state.sqlite"), []byte("recreated by Codex")); err != nil {
+		t.Fatal(err)
+	}
+	if got := a.names(); !reflect.DeepEqual(got, []string{"default"}) {
+		t.Fatalf("resurrected profile appeared in account list: %v", got)
+	}
+	if _, err := a.require("work"); err == nil {
+		t.Fatal("resurrected profile was treated as registered")
+	}
+	if _, err := a.create("work"); err != nil {
+		t.Fatal("could not register a fresh profile with the same name:", err)
+	}
+	if !registeredProfile(path) || !regularFile(filepath.Join(path, profileMarker)) {
+		t.Fatal("new profile was not marked as registered")
+	}
+	if len(a.names()) != 2 {
+		t.Fatal("newly registered profile was not listed", a.names())
+	}
+	archives, err := os.ReadDir(filepath.Join(a.Root, "removed"))
+	if err != nil || len(archives) != 2 {
+		t.Fatal("removed profile and orphan state were not both preserved", len(archives), err)
+	}
+}
+
+func TestLegacyProfilesRemainRegistered(t *testing.T) {
+	a := fixture(t)
+	profiles := filepath.Join(a.Root, "profiles")
+	if err := os.MkdirAll(filepath.Join(profiles, "authenticated"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := atomicWrite(filepath.Join(profiles, "authenticated", "auth.json"), []byte("{}")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(profiles, "configured"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := atomicWrite(filepath.Join(profiles, "configured", "config.toml"), []byte("model = 'test'")); err != nil {
+		t.Fatal(err)
+	}
+	if got := a.names(); !reflect.DeepEqual(got, []string{"default", "authenticated", "configured"}) {
+		t.Fatalf("legacy profiles disappeared: %v", got)
 	}
 }
 

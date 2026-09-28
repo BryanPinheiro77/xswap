@@ -3,7 +3,13 @@
 This project follows semantic versioning. Published entries correspond to Git
 tags; unreleased work stays in this section until a release is prepared.
 
-## Unreleased
+## v0.6.1 — 2026-09-28
+
+### Fixed
+
+- Keep Codex-created remnants of removed account directories out of the account
+  list, while preserving their data and allowing the account name to be added
+  again safely.
 
 ## v0.6.0 — 2026-09-26
 
