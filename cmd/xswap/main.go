@@ -72,6 +72,10 @@ func usage() {
   xswap auto status             Show monitor status
   xswap auto view               Open the auto-switch screen
   xswap auto --once --dry-run    Preview a single rotation check
+  xswap service install         Supervise auto-switch after login (macOS/Linux)
+  xswap service status          Show service and monitor status
+  xswap service logs            Show recent service logs
+  xswap service uninstall       Remove the supervised background service
   xswap disable NAME            Exclude account from automatic rotation
   xswap enable NAME             Include account in automatic rotation
   xswap remove NAME             Remove account and archive its local data
@@ -171,6 +175,9 @@ func (a *App) run(args []string) error {
 	}
 	if action == "project" {
 		return a.projectCommand(args[1:])
+	}
+	if action == "service" {
+		return a.serviceCommand(args[1:])
 	}
 	o, err := parse(args[1:])
 	if err != nil {

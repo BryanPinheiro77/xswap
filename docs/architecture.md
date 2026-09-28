@@ -166,7 +166,13 @@ selection. The active account and settings are rechecked under a state lock befo
 commit, so concurrent manual selection or turning auto-switch off wins.
 
 The monitor continues after closing the panel. After a reboot, starting `xswap`
-or `codex` restarts an enabled monitor; there is no installed login service.
+or `codex` restarts an enabled monitor. An optional launchd LaunchAgent on macOS
+or systemd user service on Linux can also start it at login and restart it after
+failures. Both launch the existing `__daemon` command and share its singleton
+lock. Clean exits when auto-switch is disabled do not trigger a restart. Service
+files are private, limited to XSwap-owned paths, and include only executable
+and manager directory paths. Homebrew installations use the stable `opt` wrapper
+path so package upgrades do not strand the service.
 
 ## Package-managed installations
 

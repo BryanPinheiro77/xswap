@@ -20,6 +20,7 @@ type App struct {
 	Root, DefaultHome, Binary, PackageManager string
 	HTTPClient                                *http.Client
 	CommandRunner                             func(context.Context, string, ...string) error
+	ServiceRunner                             func(context.Context, string, ...string) (string, error)
 	SessionIndexer                            func(string, string) error
 	SessionActive                             func(string, string) (bool, error)
 	PanelActionRunner                         func(string, io.Reader, io.Writer) panelActionResult

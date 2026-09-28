@@ -3,6 +3,16 @@
 This project follows semantic versioning. Published entries correspond to Git
 tags; unreleased work stays in this section until a release is prepared.
 
+## Unreleased
+
+## v0.7.0 — 2026-09-28
+
+### Added
+
+- Add an optional per-user launchd or systemd service for the auto-switch
+  monitor, with install, status, logs, and uninstall commands. The supervisor
+  restarts failed monitors with a delay and leaves cleanly stopped monitors off.
+
 ## v0.6.1 — 2026-09-28
 
 ### Fixed

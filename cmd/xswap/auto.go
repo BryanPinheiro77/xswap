@@ -199,10 +199,13 @@ func (a *App) configureAuto(enabled bool, threshold, interval int) error {
 		}
 		return writeJSON(filepath.Join(a.Root, "settings.json"), s)
 	})
-	if err == nil && enabled {
-		a.ensureDaemon()
+	if err != nil {
+		return err
 	}
-	return err
+	if enabled {
+		return a.ensureDaemon()
+	}
+	return a.stopInstalledService()
 }
 func (a *App) daemonRunning() bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
@@ -214,17 +217,25 @@ func (a *App) daemonRunning() bool {
 	unlock()
 	return false
 }
-func (a *App) ensureDaemon() {
+func (a *App) ensureDaemon() error {
 	s, err := a.settings()
 	if err != nil || !s.Auto.Enabled || a.daemonRunning() {
-		return
+		return err
+	}
+	installed, err := a.serviceInstalled()
+	if err != nil {
+		return err
+	}
+	if installed {
+		return a.startInstalledService()
 	}
 	cmd := exec.Command(a.Binary, "__daemon")
 	cmd.Env = envWith(os.Environ(), "CODEX_SWAP_HOME", a.Root)
 	configureDaemon(cmd)
-	if err = cmd.Start(); err == nil {
-		cmd.Process.Release()
+	if err = cmd.Start(); err != nil {
+		return err
 	}
+	return cmd.Process.Release()
 }
 func (a *App) daemon() error {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
@@ -237,6 +248,8 @@ func (a *App) daemon() error {
 	}
 	defer unlock()
 	defer os.Remove(filepath.Join(a.Root, "auto-daemon.json"))
+	fmt.Fprintln(os.Stderr, "XSwap auto-switch monitor started")
+	defer fmt.Fprintln(os.Stderr, "XSwap auto-switch monitor stopped")
 	go func() {
 		ticker := time.NewTicker(500 * time.Millisecond)
 		defer ticker.Stop()
@@ -246,7 +259,7 @@ func (a *App) daemon() error {
 				return
 			case <-ticker.C:
 				s, err := a.settings()
-				if err != nil || !s.Auto.Enabled {
+				if err == nil && !s.Auto.Enabled {
 					cancel()
 					return
 				}
@@ -267,8 +280,12 @@ func (a *App) daemon() error {
 		if ctx.Err() != nil {
 			return nil
 		}
-		if _, err = a.evaluate(records, active, false, false); err != nil {
-			return err
+		result, evaluateErr := a.evaluate(records, active, false, false)
+		if evaluateErr != nil {
+			return evaluateErr
+		}
+		if result.Switched {
+			fmt.Fprintf(os.Stderr, "XSwap auto-switch: %s → %s\n", active, result.Active)
 		}
 		writeJSON(filepath.Join(a.Root, "auto-daemon.json"), map[string]any{"pid": os.Getpid(), "heartbeat": time.Now().Unix()})
 		select {

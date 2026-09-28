@@ -179,6 +179,48 @@ A one-shot check runs even while the persistent monitor is off. `--dry-run`
 previews its decision without changing selection; temporary threshold overrides
 do not change the persistent configuration.
 
+### Supervised background service
+
+On macOS and Linux, an optional user service can start the enabled monitor at
+login and restart it after a failure:
+
+```sh
+xswap service install
+xswap auto on
+xswap service status
+xswap service logs
+xswap service uninstall
+```
+
+The service is **not** installed by default, and installing it does not enable
+auto-switch. On macOS it is a LaunchAgent at
+`~/Library/LaunchAgents/com.bryanpinheiro77.xswap.auto.plist`; on Linux it is a
+systemd user unit at `~/.config/systemd/user/xswap-auto.service`. Both files are
+private and contain only the XSwap executable path and manager directory, never
+account credentials. Existing unrecognized files at those paths are left alone.
+When `xswap` is available in `PATH` as a link to the running executable, the
+service uses that stable path so package upgrades do not strand an old versioned
+binary path.
+
+An enabled monitor already running in detached mode stops before the service
+takes over. The existing singleton lock prevents two monitors from rotating
+accounts at once. `xswap auto off` stops the managed process cleanly; turning it
+back on starts the service. macOS launchd waits at least 30 seconds between
+restarts after failures. Linux systemd uses a 30-second restart delay with a
+five-start limit in five minutes. A clean stop is not restarted. If the service
+is removed, the auto-switch setting remains unchanged; the detached monitor
+can start again the next time `xswap` or `codex` opens.
+
+`xswap service logs` shows the last 100 lines from the private macOS log at
+`~/.codex-swap/logs/service.log`, or the systemd user journal on Linux. If
+`service status` says the service is installed but the monitor is stopped while
+auto-switch is on, run `xswap service install` to reload its registration, then
+check the logs. On Linux, `systemctl --user reset-failed xswap-auto.service`
+clears a restart limit reached after repeated crashes. Run `xswap service
+uninstall` before removing the XSwap package; `xswap uninstall` removes the
+service as part of its normal cleanup. Windows does not provide this optional
+service yet.
+
 ## Disable, enable, and remove
 
 ```sh
