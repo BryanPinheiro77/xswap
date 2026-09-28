@@ -317,6 +317,13 @@ func (a *App) uninstall() error {
 	if err = a.configureAuto(false, 0, 0); err != nil {
 		return err
 	}
+	if installed, serviceErr := a.serviceInstalled(); serviceErr != nil {
+		return serviceErr
+	} else if installed {
+		if err = a.uninstallService(); err != nil {
+			return err
+		}
+	}
 	var metadata unixInstallation
 	_ = readJSON(filepath.Join(a.Root, "installation.json"), &metadata)
 	home, _ := os.UserHomeDir()
