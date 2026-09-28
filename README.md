@@ -178,6 +178,13 @@ Use the separate confirmed project-switch action when running managed sessions
 must be transferred and resumed. The monitor continues after
 the panel closes. After reboot, opening `xswap` or `codex` restarts it if enabled.
 
+On macOS and Linux, `xswap service install` optionally registers a user service
+that starts the enabled monitor after login and restarts it after a failure.
+Use `xswap service status`, `xswap service logs`, and `xswap service uninstall`
+to inspect or remove it. Installing the service does not enable auto-switch;
+run `xswap auto on` when you want rotation. Windows keeps the existing detached
+monitor behavior. See the [usage guide](docs/usage.md#supervised-background-service).
+
 ## Account controls
 
 ```sh
