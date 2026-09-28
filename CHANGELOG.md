@@ -5,6 +5,8 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ## Unreleased
 
+## v0.7.0 — 2026-09-28
+
 ### Added
 
 - Add an optional per-user launchd or systemd service for the auto-switch
