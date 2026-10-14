@@ -6,7 +6,7 @@ require golang.org/x/term v0.46.0
 
 require (
 	charm.land/bubbletea/v2 v2.0.9
-	golang.org/x/sys v0.48.0
+	golang.org/x/sys v0.49.0
 )
 
 require (
