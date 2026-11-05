@@ -169,6 +169,7 @@ account for unpinned directories instead of creating a broad
 ```sh
 xswap auto on
 xswap auto on --threshold 80
+xswap auto status --threshold-5h 90 --threshold-7d 80
 xswap auto view
 xswap auto --once --dry-run
 xswap auto off
@@ -178,6 +179,14 @@ Auto-switch starts **off**. At the default 90% usage threshold, it selects an
 eligible account with the most remaining main Codex quota. It requires five
 percentage points of improvement and a five-minute cooldown. Disabled accounts,
 stale or missing quotas, expired windows, and failed reads cannot become targets.
+
+Optional `--threshold-5h` and `--threshold-7d` limits override the global
+threshold for each window. Use `global` to clear an override. Rotation triggers
+when either limit is reached; destinations must be below all applicable limits
+and improve minimum remaining headroom by five points. With no overrides,
+behavior stays the same. The auto view shows the effective limits; `+`/`-`
+adjust only the global fallback. See [auto-switch settings](docs/usage.md#auto-switch)
+for precedence, examples, and one-shot previews.
 
 **Automatic and global manual switching affect newly started Codex processes.**
 Use the separate confirmed project-switch action when running managed sessions

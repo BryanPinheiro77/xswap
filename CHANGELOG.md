@@ -7,6 +7,11 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ### Added
 
+- Add optional 5h and 7d auto-switch thresholds, with the global threshold as
+  fallback. The CLI supports per-window overrides and reset to `global`; the
+  auto view shows effective limits and remaining headroom. Trigger, candidate
+  eligibility, and ranking share the same rules while preserving the existing
+  global-only policy, cooldown, and locked settings recheck.
 - Add visible session handoff filters for the latest 20 conversations, last
   24 hours, last 7 days, or all sessions. Keyboard shortcuts keep filters
   available during selection; the CLI accepts `project switch --sessions`

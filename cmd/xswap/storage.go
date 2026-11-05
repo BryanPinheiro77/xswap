@@ -27,11 +27,13 @@ type App struct {
 	PanelActionRunner                         func(string, io.Reader, io.Writer) panelActionResult
 }
 type AutoConfig struct {
-	Enabled   bool `json:"enabled"`
-	Threshold int  `json:"threshold"`
-	Interval  int  `json:"interval"`
-	Cooldown  int  `json:"cooldown"`
-	Margin    int  `json:"margin"`
+	Enabled     bool `json:"enabled"`
+	Threshold   int  `json:"threshold"`
+	Interval    int  `json:"interval"`
+	Cooldown    int  `json:"cooldown"`
+	Margin      int  `json:"margin"`
+	Threshold5h *int `json:"threshold5h,omitempty"`
+	Threshold7d *int `json:"threshold7d,omitempty"`
 }
 type Settings struct {
 	UnknownKeys  []string          `json:"-"`
@@ -170,7 +172,7 @@ func readJSON(path string, v any) error {
 	return json.Unmarshal(data, v)
 }
 func (a *App) settings() (Settings, error) {
-	s := Settings{Disabled: []string{}, DisplayNames: map[string]string{}, Auto: AutoConfig{false, 90, 60, 300, 5}}
+	s := Settings{Disabled: []string{}, DisplayNames: map[string]string{}, Auto: AutoConfig{Threshold: 90, Interval: 60, Cooldown: 300, Margin: 5}}
 	data, err := os.ReadFile(filepath.Join(a.Root, "settings.json"))
 	if errors.Is(err, os.ErrNotExist) {
 		return s, nil
@@ -182,8 +184,8 @@ func (a *App) settings() (Settings, error) {
 	if s.DisplayNames == nil {
 		s.DisplayNames = map[string]string{}
 	}
-	if err == nil && (s.Auto.Threshold < 1 || s.Auto.Threshold > 100 || s.Auto.Interval < 10 || s.Auto.Cooldown < 0 || s.Auto.Margin < 0) {
-		err = errors.New("invalid auto-switch configuration")
+	if err == nil {
+		err = s.Auto.validate()
 	}
 	if err == nil {
 		s.UnknownKeys = unknownSettingsKeys(data, reflect.TypeOf(s), "")

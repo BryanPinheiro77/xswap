@@ -72,6 +72,7 @@ func usage() {
   xswap limits [NAME] [--all]    Show current quota usage and resets
   xswap watch [NAME]             Watch quota usage (--interval 30, --once)
   xswap auto on                 Start automatic rotation in the background
+                                --threshold-5h N|global --threshold-7d N|global
   xswap auto off                Stop automatic rotation
   xswap auto status             Show monitor status
   xswap auto view               Open the auto-switch screen
@@ -117,7 +118,7 @@ func parse(args []string) (Options, error) {
 		switch key {
 		case "device-auth", "all", "yes", "once", "dry-run", "check":
 			o.Flags[key] = true
-		case "threshold", "interval", "repo", "label", "path", "sessions":
+		case "threshold", "threshold-5h", "threshold-7d", "interval", "repo", "label", "path", "sessions":
 			i++
 			if i >= len(args) {
 				return o, fmt.Errorf("--%s requires a value", key)
@@ -189,6 +190,14 @@ func (a *App) run(args []string) error {
 	}
 	if _, ok := o.Values["sessions"]; ok {
 		return errors.New("--sessions is only supported by xswap project switch")
+	}
+	if action != "auto" {
+		if _, short := o.Values["threshold-5h"]; short {
+			return errors.New("--threshold-5h is only supported by xswap auto")
+		}
+		if _, weekly := o.Values["threshold-7d"]; weekly {
+			return errors.New("--threshold-7d is only supported by xswap auto")
+		}
 	}
 	if o.Flags["help"] {
 		usage()
@@ -370,6 +379,11 @@ func (a *App) projectCommand(args []string) error {
 	o, err := parse(args[1:])
 	if err != nil {
 		return err
+	}
+	for _, key := range []string{"threshold-5h", "threshold-7d"} {
+		if _, present := o.Values[key]; present {
+			return fmt.Errorf("--%s is only supported by xswap auto", key)
+		}
 	}
 	filter := sessionFilterAll
 	if value, ok := o.Values["sessions"]; ok {

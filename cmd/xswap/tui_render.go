@@ -157,7 +157,7 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 		footer = "  s Switch accounts   w Watch   u Auto-switch   q Quit   ^t Theme"
 	}
 	if p.Mode == "auto" {
-		footer = "  e Enable / stop   +/- Threshold   r Refresh   esc Back   q Quit"
+		footer = "  e Enable / stop   +/- Global   r Refresh   esc Back   q Quit"
 	}
 	if p.Mode == "rename-input" {
 		footer = "  Type display name   enter Save   backspace Delete   esc Cancel   q Quit"
