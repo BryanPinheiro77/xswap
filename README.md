@@ -1,12 +1,12 @@
-<h1>
+<h1 align="center">
+  XSwap<br>
   <picture>
     <source media="(prefers-reduced-motion: reduce)" srcset="docs/assets/branding/xswap-mascot.png">
-    <img align="middle" src="docs/assets/branding/xswap-mascot.gif" width="72" height="72" alt="">
+    <img src="docs/assets/branding/xswap-mascot.gif" width="192" height="192" alt="">
   </picture>
-  XSwap
 </h1>
 
-**Account switcher for Codex.**
+<p align="center"><strong>Account switcher for Codex.</strong></p>
 
 A terminal account manager for the official OpenAI Codex CLI, written in Go.
 Use `xswap` to manage isolated accounts, watch quotas, and select the account

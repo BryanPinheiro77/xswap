@@ -13,8 +13,8 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ### Fixed
 
-- Keep the README title divider below the mascot by placing the image inline
-  inside the heading.
+- Center the README title above the mascot in a vertical header, keeping the
+  title divider below the animation.
 
 ## v0.9.0 — 2026-11-05
 
