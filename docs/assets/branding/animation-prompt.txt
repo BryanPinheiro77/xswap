@@ -1,0 +1,14 @@
+Built-in imagegen edit prompts for the approved animation sources. The GIF is rendered from these fixed layers by scripts/render-mascot.swift.
+
+Character extraction
+Mode: built-in imagegen. A single identity-preserving transparent cutout is used by a continuous animation rig; no pose morphing or optical-flow interpolation.
+
+Use case: background-extraction / identity-preserve. Edit target: the approved XSwap icon in the supplied image. Extract ONLY the complete original mascot, with its two soft charcoal curled ears, charcoal bean-shaped body, ivory oval eyes and small feet. Preserve its front-facing pose, geometry, relative proportions, original satin 3D lighting, violet highlights and character identity as closely as possible.
+Remove the entire purple app tile, all background and the ground cast shadow. Return the COMPLETE character on a truly transparent background, including the tiny feet and both curved ears fully inside the image. No new features, no reinterpretation, no turning, no blinking, no arms or mouth.
+Use a high-resolution square canvas, ideally 2048x2048 or larger. Center the mascot with equal generous margins: its outer bounding box should approximately span 12% to 88% horizontally and 12% to 88% vertically. Keep the original relaxed curled shape of the taller ear on screen-left, and the smaller drooping arch on screen-right. This clean single still will be animated with a continuous mesh rig, so crisp clean transparent alpha edges and exact stable anatomy matter more than pose variation. No checkerboard, labels, symbols, tile, floor or shadow.
+
+Body layer correction
+Mode: built-in imagegen; remove only the feet to create an intact body layer for the existing animation rig.
+
+Use case: precise-object-edit. Edit the supplied transparent XSwap mascot image ONLY by removing the two little feet at the bottom. Keep all other artwork pixel-position aligned to the reference: same canvas dimensions, same scale, same front-facing charcoal body and its smooth rounded underside, same ivory eyes, curled ears, satin material, violet edge light and transparent background. Do NOT recenter, zoom, rescale, change the face, move the ears, enlarge or lower the body after removing feet.
+This is an animation body layer; the feet will be rendered behind it separately. The underside of the bean-shaped body must be one uninterrupted smooth gently rounded curve from left to right, with no crotch, V, notch, bump, point, stumps or remnants of feet. Preserve the original body contour above the feet; remove only the feet that protrude beneath that contour and fill their former area with genuine transparency. The lowest body edge stays at approximately the same row as the original belly above the feet. No floor, shadow, tile or added details. Exact same square framing as input.
