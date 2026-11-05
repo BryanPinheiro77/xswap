@@ -444,6 +444,10 @@ func (a *App) create(name string) (string, error) {
 	} else if !errors.Is(statErr, os.ErrNotExist) {
 		return "", statErr
 	}
+	// A reused name must not inherit the removed account's health observations.
+	if err = os.Remove(a.healthPath(name)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return "", fmt.Errorf("clear previous account health: %w", err)
+	}
 	if err = os.Mkdir(path, 0700); err != nil {
 		return "", fmt.Errorf("account %q already exists or cannot be created; retry login with: xswap login %s", name, name)
 	}

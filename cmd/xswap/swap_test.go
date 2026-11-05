@@ -443,8 +443,9 @@ func TestHelperProcess(t *testing.T) {
 	encoder := json.NewEncoder(os.Stdout)
 	for scanner.Scan() {
 		var request struct {
-			ID     int    `json:"id"`
-			Method string `json:"method"`
+			ID     int             `json:"id"`
+			Method string          `json:"method"`
+			Params json.RawMessage `json:"params"`
 		}
 		json.Unmarshal(scanner.Bytes(), &request)
 		if request.Method == "initialized" {
@@ -453,8 +454,31 @@ func TestHelperProcess(t *testing.T) {
 		var result any = map[string]any{}
 		switch request.Method {
 		case "account/read":
+			var params struct {
+				RefreshToken bool `json:"refreshToken"`
+			}
+			if json.Unmarshal(request.Params, &params) != nil || params.RefreshToken {
+				os.Exit(2)
+			}
 			result = map[string]any{"account": Account{Type: "chatgpt", Email: "test@example.com", Plan: "plus"}}
+			switch os.Getenv("XSWAP_TEST_AUTH_MODE") {
+			case "pending":
+				result = map[string]any{"account": nil}
+			case "api-key":
+				result = map[string]any{"account": Account{Type: "apiKey"}}
+			case "unknown-type":
+				result = map[string]any{"account": Account{Type: "futureType"}}
+			}
 		case "account/rateLimits/read":
+			switch os.Getenv("XSWAP_TEST_AUTH_MODE") {
+			case "expired", "failure":
+				message := "failed to fetch codex rate limits: 401 Unauthorized"
+				if os.Getenv("XSWAP_TEST_AUTH_MODE") == "failure" {
+					message = "network unavailable: private-test-error-value"
+				}
+				encoder.Encode(map[string]any{"id": request.ID, "error": map[string]any{"code": -32603, "message": message}})
+				continue
+			}
 			record := quota(5, 65, time.Now().Unix())
 			switch os.Getenv("XSWAP_TEST_QUOTA_MODE") {
 			case "hollow":

@@ -444,6 +444,12 @@ func (p *Panel) accountLines(a *App, names []string, s Settings, now time.Time) 
 			title = highlight + " ▌" + strings.TrimPrefix(stripANSI(title), "  ") + reset
 		}
 		lines = append(lines, title)
+		lines = append(lines, muted+"     Status: "+clean(a.accountHealthLabel(name, record.Health))+reset)
+		if detail {
+			for _, status := range healthDetails(record.Health) {
+				lines = append(lines, muted+"     "+status+reset)
+			}
+		}
 		if detail && (state == quotaValid || state == quotaStale) {
 			items := quotaWindows(record.Limits)
 			for _, item := range items {
