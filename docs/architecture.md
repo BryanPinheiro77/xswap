@@ -15,6 +15,7 @@ in `.github/` and longer guides in `docs/`.
 | `doctor.go`, `doctor_unix.go`, `doctor_windows.go` | Read-only, offline installation and manager diagnostics |
 | `storage.go` | Profiles, config, private atomic writes, and file locks |
 | `rpc.go` | Official Codex process execution and app-server quota queries |
+| `health.go` | Authentication observations, safe health metadata, and status text |
 | `auto.go` | Background monitor, quota scoring, and rotation decisions |
 | `update.go` | GitHub release checks, archive validation, and atomic executable updates |
 | `install_unix.go`, `install_windows.go` | Platform command installation and removal |
@@ -134,6 +135,26 @@ windows. A hollow or partial response retains the last valid in-memory reading
 as stale instead of replacing it or refreshing its timestamp. The panel labels
 valid, stale, and unavailable readings explicitly; stale readings never qualify
 for automatic rotation.
+
+Quota queries also record private observation metadata under
+`health/NAME.json` in the manager directory: authentication state, last attempt,
+last successful complete quota query, onset of staleness after a failure, and a
+fixed error category. No credentials, identity payloads, quotas, or raw RPC
+errors are saved there. Writes occur under the existing per-account query lock
+and are best-effort; health metadata is never used to authorize selection or
+rotation. The list reads it offline. The panel reads cached observations while
+its asynchronous refresh is pending and keeps the latest health observation
+alongside its last valid in-memory quota snapshot after a failed query.
+
+Account reads keep `refreshToken: false`. A successful quota response confirms
+authentication; an account read alone only establishes saved login state.
+Explicit authentication rejections, or a missing server account despite saved
+or previously confirmed login, indicate an expired or invalid login. Other
+query failures remain distinct. Quota RPC error text is used only for conservative
+classification and is replaced with a fixed message before display. These
+observations do not run login or request a credential refresh; the official CLI
+still owns its authentication lifecycle. See the official
+[app-server protocol](https://github.com/openai/codex/blob/main/codex-rs/app-server/README.md).
 
 ## Terminal panel
 

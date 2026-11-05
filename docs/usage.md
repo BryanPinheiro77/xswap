@@ -25,6 +25,46 @@ their original account. Selection does not alter the Codex desktop application.
 The installed `codex` wrapper supervises new terminal sessions automatically;
 you do not need to open the `xswap` panel first.
 
+## Account health and authentication
+
+`xswap list` stays offline. It shows the last saved health observation and its
+timestamps, or a local hint when an account has not been checked yet. Use
+`xswap limits NAME`, `xswap watch NAME --once`, or the panel/watch refresh to
+make a bounded live query through the official Codex CLI.
+
+| Status | Meaning |
+| --- | --- |
+| `original account` | The `default` profile, shown alongside its authentication observation |
+| `not checked` | No authentication evidence from the latest attempt, or no observation yet; the original account may use the OS credential store |
+| `login pending` | A named profile has no saved login, or Codex reports no account without a saved or previously confirmed login |
+| `login saved; not verified` | A login file or account identity is present, but a successful quota response has not confirmed authentication |
+| `authenticated` | Codex returned a successful quota response at the recorded check time |
+| `expired or invalid login` | Codex explicitly rejected authentication or no longer reports an account despite saved or previously confirmed login; run `xswap login NAME` |
+| `API key; subscription quotas unsupported` | Codex reported an API-key account; subscription quotas are unavailable |
+| `unsupported account type` | Codex reported another account type without supported subscription quotas |
+
+These are observations, not a guarantee that credentials remain usable. The
+list does not revalidate credentials; inspect **Last check** before relying on
+an old observation. Last successful quota query, the first failed check after
+that success (**Quota data stale since**), and a safe last-error summary appear
+when available. Network and timeout failures do not imply an expired login.
+The panel keeps its last valid quota reading after a failed refresh and marks
+it stale; stale data never qualifies for automatic rotation. A later successful
+query clears the failure and stale markers. Cached health metadata contains no
+quota readings, so reopening the panel requires a new query to show quota bars.
+
+XSwap stores only status, timestamps, and fixed diagnostic categories in private
+`health/NAME.json` files inside the manager directory. It never stores
+credentials, e-mails, or raw server error payloads there. Cache failures do not
+block quota polling or change account eligibility. Reusing a removed account
+name clears its old observation; completing an explicit login resets the hint
+to saved and unverified until the next query.
+
+Health checks request `account/read` with `refreshToken: false`, never launch
+login, and never request a silent credential refresh. The official Codex CLI
+owns its authentication behavior. A pending or invalid login needs an explicit
+`xswap login NAME`.
+
 ## Project accounts and conversation handoff
 
 ```sh

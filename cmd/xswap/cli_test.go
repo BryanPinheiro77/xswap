@@ -92,8 +92,14 @@ func TestBrowserAndDeviceLoginUseOnlyNamedTemporaryProfile(t *testing.T) {
 			if err := writeJSON(filepath.Join(a.Root, "installation.json"), map[string]string{"cli": cli}); err != nil {
 				t.Fatal(err)
 			}
+			if err := writeJSON(a.healthPath("work"), AccountHealth{Authentication: authInvalid, LastSuccess: 10, Error: "Authentication rejected"}); err != nil {
+				t.Fatal(err)
+			}
 			if err := a.login("work", device); err != nil {
 				t.Fatal(err)
+			}
+			if health := a.savedHealth("work"); health.Authentication != authSaved || health.LastSuccess != 0 || health.Error != "" {
+				t.Fatal("explicit login did not reset health to unverified", health)
 			}
 			home, _ := a.profile("work")
 			args, err := os.ReadFile(filepath.Join(home, "login-args"))

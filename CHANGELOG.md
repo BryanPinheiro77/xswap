@@ -7,6 +7,10 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ### Added
 
+- Show account authentication observations, last check and successful quota
+  query times, stale-data onset, and safe error summaries in list, panel, and
+  watch views. The list remains offline; quota queries update private health
+  metadata without storing credentials or raw server errors.
 - Warn about unknown settings keys at startup, in the panel, and in `xswap
   doctor`, while retaining valid configuration values and legacy defaults.
 

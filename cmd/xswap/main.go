@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -471,6 +472,10 @@ func printProjectHandoffResult(a *App, result projectHandoffResult) {
 	}
 }
 func (a *App) list() error {
+	return a.listTo(os.Stdout)
+}
+
+func (a *App) listTo(out io.Writer) error {
 	s, err := a.settings()
 	if err != nil {
 		return err
@@ -480,14 +485,8 @@ func (a *App) list() error {
 		if name == a.selected() {
 			marker = "*"
 		}
-		note := "original account"
-		home, _ := a.profile(name)
-		if name != "default" {
-			note = "login pending"
-			if exists(filepath.Join(home, "auth.json")) {
-				note = "login saved"
-			}
-		}
+		health := a.savedHealth(name)
+		note := a.accountHealthLabel(name, health)
 		if disabled(s, name) {
 			note += " · disabled for rotation"
 		}
@@ -495,8 +494,11 @@ func (a *App) list() error {
 		if custom := strings.TrimSpace(s.DisplayNames[name]); custom != "" {
 			label = custom
 		}
-		fmt.Printf("%s %s: %s\n", marker, label, note)
+		fmt.Fprintf(out, "%s %s: %s\n", marker, clean(label), note)
+		for _, detail := range healthDetails(health) {
+			fmt.Fprintln(out, "    "+detail)
+		}
 	}
-	fmt.Println("\nadd | switch | watch | auto | disable | enable | remove | --help")
+	fmt.Fprintln(out, "\nadd | switch | watch | auto | disable | enable | remove | --help")
 	return nil
 }

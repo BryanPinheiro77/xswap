@@ -13,6 +13,8 @@ used by newly launched Codex processes.
 - Manual selection and parallel runs without copying tokens between accounts.
 - Project-local account selection and confirmed conversation handoff between accounts.
 - Live quota watching through the official Codex app server.
+- Account authentication observations, last successful quota queries, and stale
+  data diagnostics in the list, panel, and watch views.
 - Opt-in background auto-switch with fresh-quota checks and a cooldown.
 - Offline `xswap doctor` diagnostics for CLI integration, profiles, settings,
   and monitor health.

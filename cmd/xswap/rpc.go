@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"path/filepath"
@@ -36,11 +37,12 @@ type Limits struct {
 	Buckets map[string]Bucket `json:"rateLimitsByLimitId"`
 }
 type Record struct {
-	Account Account `json:"account"`
-	Limits  Limits  `json:"limits"`
-	Updated int64   `json:"updated"`
-	Error   string  `json:"error,omitempty"`
-	State   string  `json:"state,omitempty"`
+	Health  AccountHealth `json:"health,omitempty"`
+	Account Account       `json:"account"`
+	Limits  Limits        `json:"limits"`
+	Updated int64         `json:"updated"`
+	Error   string        `json:"error,omitempty"`
+	State   string        `json:"state,omitempty"`
 }
 
 const (
@@ -95,6 +97,16 @@ func reconcileQuotaRecord(previous, current Record, queryError string) Record {
 		queryError = errIncompleteQuota.Error()
 	}
 	if previous.Updated > 0 && hasCompleteQuotaEvidence(previous.Limits) {
+		if current.Health.Checked > 0 {
+			current.Health.LastSuccess = max(current.Health.LastSuccess, previous.Updated)
+			if current.Health.StaleSince == 0 {
+				current.Health.StaleSince = current.Health.Checked
+				if previous.Health.StaleSince > 0 {
+					current.Health.StaleSince = previous.Health.StaleSince
+				}
+			}
+			previous.Health = current.Health
+		}
 		previous.Error = queryError
 		previous.State = quotaStale
 		return previous
@@ -185,6 +197,7 @@ func (a *App) login(name string, device bool) error {
 	if name != "default" {
 		os.Chmod(filepath.Join(home, "auth.json"), 0600)
 	}
+	_ = writeJSON(a.healthPath(name), AccountHealth{Authentication: authSaved})
 	fmt.Printf("Login complete. Select this account with: xswap switch %s\n", name)
 	return nil
 }
@@ -197,6 +210,12 @@ type rpcReply struct {
 }
 
 type appServerRequest func(id int, method string, params any) (json.RawMessage, error)
+
+// Retain the remote message for classification. Quota queries replace it with
+// a safe diagnostic before returning an error to their callers.
+type appServerError struct{ message string }
+
+func (e *appServerError) Error() string { return e.message }
 
 func (a *App) withAppServer(parent context.Context, name string, run func(appServerRequest) error) error {
 	ctx, cancel := context.WithCancel(parent)
@@ -289,7 +308,7 @@ func (a *App) withAppServer(parent context.Context, name string, run func(appSer
 						Message string `json:"message"`
 					}
 					if json.Unmarshal(reply.Error, &failure) == nil && clean(failure.Message) != "" {
-						return nil, errors.New(clean(failure.Message))
+						return nil, &appServerError{message: clean(failure.Message)}
 					}
 					return nil, errors.New("Codex app server rejected the request")
 				}
@@ -306,14 +325,27 @@ func (a *App) withAppServer(parent context.Context, name string, run func(appSer
 	return run(request)
 }
 
-func (a *App) readLimits(parent context.Context, name string) (Record, error) {
+func (a *App) readLimits(parent context.Context, name string) (record Record, err error) {
+	if err = validate(name); err != nil {
+		return record, err
+	}
 	ctx, cancel := context.WithTimeout(parent, 20*time.Second)
 	defer cancel()
 	unlock, err := a.lock(ctx, filepath.Join("locks", name+".lock"))
 	if err != nil {
-		return Record{}, err
+		record.Health = observeHealth(a.savedHealth(name), record, err, time.Now().Unix())
+		return record, err
 	}
 	defer unlock()
+	defer func() {
+		record.Health = observeHealth(a.savedHealth(name), record, err, time.Now().Unix())
+		var remote *appServerError
+		if errors.As(err, &remote) {
+			err = errors.New(record.Health.Error)
+		}
+		// Observation storage is best-effort and never changes query eligibility.
+		_ = writeJSON(a.healthPath(name), record.Health)
+	}()
 	var accountResponse struct {
 		Account *Account `json:"account"`
 	}
@@ -327,25 +359,39 @@ func (a *App) readLimits(parent context.Context, name string) (Record, error) {
 			return errors.New("invalid account response")
 		}
 		if accountResponse.Account == nil {
+			record.Health.Authentication = authPending
+			if a.localAuthentication(name) == authSaved || a.savedHealth(name).LastSuccess > 0 {
+				record.Health.Authentication = authInvalid
+			}
+			if record.Health.Authentication == authInvalid {
+				return fmt.Errorf("expired or invalid login; run: xswap login %s", name)
+			}
 			return fmt.Errorf("login pending; run: xswap login %s", name)
 		}
+		record.Account = *accountResponse.Account
+		record.Health.Authentication = authSaved
 		if accountResponse.Account.Type != "chatgpt" {
+			record.Health.Authentication = authUnsupported
+			if accountResponse.Account.Type == "apiKey" {
+				record.Health.Authentication = authAPIKey
+			}
 			return errors.New("subscription quotas require a ChatGPT account; API keys are not supported")
 		}
 		limitsData, err = request(3, "account/rateLimits/read", nil)
 		return err
 	})
 	if err != nil {
-		return Record{}, err
+		return record, err
 	}
 	var limits Limits
 	if err = json.Unmarshal(limitsData, &limits); err != nil {
-		return Record{}, errors.New("invalid quota response")
+		return record, errors.New("invalid quota response")
 	}
-	record := Record{Account: *accountResponse.Account, Limits: limits}
+	record.Limits = limits
 	if !hasCompleteQuotaEvidence(limits) {
 		return record, errIncompleteQuota
 	}
+	record.Health.Authentication = authAuthenticated
 	record.Updated = time.Now().Unix()
 	record.State = quotaValid
 	return record, nil
@@ -367,25 +413,31 @@ func allBuckets(limits Limits) map[string]Bucket {
 	return buckets
 }
 func (a *App) showLimits(ctx context.Context, names []string) error {
+	return a.showLimitsTo(ctx, names, os.Stdout)
+}
+
+func (a *App) showLimitsTo(ctx context.Context, names []string, out io.Writer) error {
 	failed := false
 	for _, name := range names {
 		record, err := a.readLimits(ctx, name)
+		fmt.Fprintln(out, name+":")
+		a.printHealth(out, name, record.Health)
 		if err != nil {
-			fmt.Printf("%s: %v\n", name, err)
+			fmt.Fprintf(out, "%s: %v\n", name, err)
 			failed = true
 			continue
 		}
-		fmt.Printf("%s · %s · %s\n", name, clean(record.Account.Email), clean(record.Account.Plan))
+		fmt.Fprintf(out, "%s · %s · %s\n", name, clean(record.Account.Email), clean(record.Account.Plan))
 		windows := quotaWindows(record.Limits)
 		if len(windows) == 0 {
-			fmt.Println("  No quota windows returned by the server.")
+			fmt.Fprintln(out, "  No quota windows returned by the server.")
 		}
 		for _, item := range windows {
 			used := "unavailable"
 			if item.Window.Used != nil {
 				used = fmt.Sprintf("%g%% used · %g%% remaining", *item.Window.Used, max(0, 100-*item.Window.Used))
 			}
-			fmt.Printf("  %s: %s · %s\n", clean(item.Label), used, resetLabel(item.Window.Resets, time.Now()))
+			fmt.Fprintf(out, "  %s: %s · %s\n", clean(item.Label), used, resetLabel(item.Window.Resets, time.Now()))
 		}
 	}
 	if failed {

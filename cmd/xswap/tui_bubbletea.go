@@ -78,9 +78,15 @@ func newPanelModel(ctx context.Context, app *App, mode, filter string, interval 
 		names = []string{filter}
 	}
 	integrationIssue := app.codexIntegrationIssue()
+	records := make(map[string]Record, len(names))
+	for _, name := range names {
+		if health := app.savedHealth(name); health.Checked > 0 {
+			records[name] = Record{Health: health}
+		}
+	}
 	return &panelModel{
 		app:       app,
-		panel:     Panel{Mode: mode, Filter: filter, Message: integrationIssue, IntegrationIssue: integrationIssue, Records: map[string]Record{}, Width: 120, Height: 30, Busy: true},
+		panel:     Panel{Mode: mode, Filter: filter, Message: integrationIssue, IntegrationIssue: integrationIssue, Records: records, Width: 120, Height: 30, Busy: true},
 		names:     names,
 		settings:  settings,
 		filter:    filter,
