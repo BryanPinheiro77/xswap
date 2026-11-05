@@ -6,8 +6,9 @@ and palette when producing new assets.
 
 ## Placement
 
-- The README displays a 72 px mascot inline inside the project title, so the
-  heading divider stays below the image. Its four-second
+- The README centers the project name above a 192 px mascot in a vertical
+  heading, with the product tagline centered below. The heading divider stays
+  below the image. Its four-second
   loop has two frontal hops with alternating foot support, followed by three
   waves of the screen-left ear tip. A `picture`
   source selects the static PNG when the reader requests reduced motion.
