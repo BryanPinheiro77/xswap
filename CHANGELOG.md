@@ -5,6 +5,8 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ## Unreleased
 
+## v0.8.0 — 2026-11-05
+
 ### Added
 
 - Show account authentication observations, last check and successful quota
