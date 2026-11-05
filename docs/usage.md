@@ -179,6 +179,36 @@ A one-shot check runs even while the persistent monitor is off. `--dry-run`
 previews its decision without changing selection; temporary threshold overrides
 do not change the persistent configuration.
 
+### Settings
+
+XSwap stores settings in `~/.codex-swap/settings.json` (or inside
+`CODEX_SWAP_HOME` when set). Prefer the CLI commands for changes. Hand-edited
+files support these keys:
+
+| Key | Default | Accepted values |
+| --- | --- | --- |
+| `disabled` | `[]` | Array of account names excluded from auto-switch |
+| `displayNames` | `{}` | Object mapping account names to display labels |
+| `auto.enabled` | `false` | Boolean |
+| `auto.threshold` | `90` | Integer from 1 to 100, percent used |
+| `auto.interval` | `60` | Integer of at least 10 seconds |
+| `auto.cooldown` | `300` | Nonnegative integer, seconds |
+| `auto.margin` | `5` | Nonnegative integer, percentage points |
+
+Missing fields retain their defaults, including files written by older XSwap
+versions. Existing case-insensitive field names remain accepted. Unknown keys
+are ignored with a warning naming their path, such as `auto.threshhold`, on
+standard error at startup and in the panel. Valid fields still apply; a
+misspelled field leaves the supported field at its default. `xswap doctor`
+also reports unknown keys as a warning (exit code 1). Warnings never print
+setting values.
+
+Correct or remove unknown keys before making changes. Reading settings does
+not rewrite the file; saving through XSwap writes supported fields only, so
+back up a file from a newer version before using an older XSwap to edit it.
+Invalid JSON, incorrect field types, and out-of-range auto-switch values remain
+errors and prevent settings changes until repaired.
+
 ### Supervised background service
 
 On macOS and Linux, an optional user service can start the enabled monitor at

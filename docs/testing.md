@@ -11,7 +11,7 @@ call GitHub, or update the contributor's installed executable.
 | Area | Successful behavior | Failure and boundary behavior |
 | --- | --- | --- |
 | Profiles | Numbered creation, private config, skills link | Invalid names; credentials and sessions are not copied |
-| Management | Manual selection, enable/disable, removal archival | Active/default removal blocked; pending login rejected; corrupt settings and blocked archival preserve profiles; symlink profiles rejected |
+| Management | Manual selection, enable/disable, removal archival; unknown settings warnings preserve valid values and legacy defaults | Active/default removal blocked; pending login rejected; corrupt settings and blocked archival preserve profiles; symlink profiles rejected |
 | Storage | Private atomic replacement, lock release, legacy config defaults | Invalid JSON/config, file-parent write errors, lock contention and cancellation |
 | Installation | Durable Unix links, shell blocks, Windows wrappers, repair detection, account routing, PATH priority, Codex package updates, and clean removal | Unrelated commands and shell content preserved; missing original CLI, unsafe shell files, incomplete blocks, and foreign wrappers rejected |
 | Login | Simulated browser/device invocation inside a named temporary profile | Failed login reported; original account and selection preserved |

@@ -138,6 +138,9 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 		}
 	}
 	rows[p.Height-3] = "  \x1b[33m" + clean(p.Message) + reset
+	if warning := s.configurationWarning(); warning != "" {
+		rows[p.Height-4] = "  \x1b[33m" + clean(warning) + reset
+	}
 	footer := "  s Switch   r Refresh   esc Back   t Theme   q Quit"
 	if p.Mode == "home" {
 		footer = "  s Switch accounts   w Watch   u Auto-switch   q Quit   ^t Theme"

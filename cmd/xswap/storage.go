@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"sort"
 	"strconv"
@@ -33,6 +34,7 @@ type AutoConfig struct {
 	Margin    int  `json:"margin"`
 }
 type Settings struct {
+	UnknownKeys  []string          `json:"-"`
 	Disabled     []string          `json:"disabled"`
 	DisplayNames map[string]string `json:"displayNames,omitempty"`
 	Auto         AutoConfig        `json:"auto"`
@@ -183,7 +185,59 @@ func (a *App) settings() (Settings, error) {
 	if err == nil && (s.Auto.Threshold < 1 || s.Auto.Threshold > 100 || s.Auto.Interval < 10 || s.Auto.Cooldown < 0 || s.Auto.Margin < 0) {
 		err = errors.New("invalid auto-switch configuration")
 	}
+	if err == nil {
+		s.UnknownKeys = unknownSettingsKeys(data, reflect.TypeOf(s), "")
+		sort.Strings(s.UnknownKeys)
+	}
 	return s, err
+}
+
+// Match encoding/json's case-insensitive field names while leaving map keys
+// (such as account names in displayNames) unrestricted.
+func unknownSettingsKeys(data []byte, schema reflect.Type, prefix string) []string {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(data, &fields) != nil {
+		return nil
+	}
+	var unknown []string
+	for key, value := range fields {
+		matched := false
+		for i := 0; i < schema.NumField(); i++ {
+			field := schema.Field(i)
+			name := strings.Split(field.Tag.Get("json"), ",")[0]
+			if name == "-" || !strings.EqualFold(key, name) {
+				continue
+			}
+			matched = true
+			if field.Type.Kind() == reflect.Struct {
+				unknown = append(unknown, unknownSettingsKeys(value, field.Type, prefix+name+".")...)
+			}
+			break
+		}
+		if !matched {
+			unknown = append(unknown, prefix+key)
+		}
+	}
+	return unknown
+}
+
+func (s Settings) configurationWarning() string {
+	if len(s.UnknownKeys) == 0 {
+		return ""
+	}
+	keys := make([]string, len(s.UnknownKeys))
+	for i, key := range s.UnknownKeys {
+		keys[i] = strconv.Quote(key)
+	}
+	return "settings.json: unknown configuration keys ignored: " + strings.Join(keys, ", ") + "; check spelling or run xswap doctor"
+}
+
+func (a *App) warnSettings(out io.Writer) {
+	if s, err := a.settings(); err == nil {
+		if warning := s.configurationWarning(); warning != "" {
+			fmt.Fprintln(out, "xswap: warning:", warning)
+		}
+	}
 }
 func (a *App) displayName(name string) string {
 	s, err := a.settings()
