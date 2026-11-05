@@ -1,6 +1,6 @@
 <picture>
   <source media="(prefers-reduced-motion: reduce)" srcset="docs/assets/branding/xswap-mascot.png">
-  <img align="right" src="docs/assets/branding/xswap-mascot.gif" width="112" height="112" alt="XSwap's charcoal mascot with curled ears and ivory eyes on a violet tile.">
+  <img align="right" src="docs/assets/branding/xswap-mascot.gif" width="112" height="112" alt="XSwap's charcoal mascot hopping and waving a curled ear on a violet tile.">
 </picture>
 
 # XSwap

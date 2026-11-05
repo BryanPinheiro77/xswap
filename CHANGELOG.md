@@ -7,9 +7,9 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ### Added
 
-- Add the purple XSwap mascot to the README with a compact animated GIF and a
-  static alternative for reduced motion. Include a GitHub social preview card
-  and instructions for maintaining and uploading the brand assets.
+- Add the purple XSwap mascot to the README with frontal hops, an ear wave,
+  and a static alternative for reduced motion. Include a GitHub social preview
+  card and instructions for maintaining and uploading the brand assets.
 
 ## v0.9.0 — 2026-11-05
 
