@@ -43,7 +43,11 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 		for _, source := range p.HandoffSources {
 			sources = append(sources, clean(a.displayName(source)))
 		}
-		rows[1] = muted + "  from " + strings.Join(sources, ", ") + "  ·  project " + clean(filepath.Base(p.HandoffProject)) + reset
+		projectSummary := "  project " + clean(filepath.Base(p.HandoffProject))
+		if len(sources) > 0 {
+			projectSummary = "  from " + strings.Join(sources, ", ") + "  ·" + projectSummary
+		}
+		rows[1] = muted + projectSummary + reset
 	}
 	lines, chosen := p.accountLines(a, names, s, now)
 	if p.Mode == "project-select" {
@@ -109,7 +113,14 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 	if p.Mode == "rename-input" {
 		lines = append(lines, "", bold+"  Display name: "+p.Input+"█"+reset, muted+"  Type a name, or leave it empty to use the e-mail. Enter saves; Esc cancels."+reset)
 	}
-	available := p.Height - 6
+	contentStart := 2
+	if p.Mode == "session-select" {
+		total := max(len(p.HandoffAllSessions), len(p.HandoffSessions))
+		rows[2] = accent(p.Theme) + "  Filter: " + p.HandoffTimeFilter.label() + fmt.Sprintf(" · %d/%d shown", len(p.HandoffSessions), total) + reset
+		rows[3] = muted + "  1 Recent   2 24h   3 7d   4 All" + reset
+		contentStart = 4
+	}
+	available := p.Height - 6 - (contentStart - 2)
 	if p.Mode == "home" {
 		menuItems := p.menu()
 		available = max(1, p.Height-len(menuItems)-11)
@@ -121,7 +132,7 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 	}
 	p.Offset = min(p.Offset, max(0, len(lines)-available))
 	for i, line := range lines[p.Offset:min(len(lines), p.Offset+available)] {
-		rows[2+i] = line
+		rows[contentStart+i] = line
 	}
 	if p.Mode == "home" {
 		menuItems := p.menu()
@@ -152,7 +163,7 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 		footer = "  Type display name   enter Save   backspace Delete   esc Cancel   q Quit"
 	}
 	if p.Mode == "session-select" {
-		footer = "  space Toggle   a Select / unselect all   enter Continue   esc Back"
+		footer = "  space Toggle  a Toggle all  enter Continue"
 	}
 	if p.Mode == "conflict-source" {
 		footer = "  enter Keep this account copy   esc Back   q Quit"
@@ -165,6 +176,9 @@ func (p *Panel) render(a *App, names []string, s Settings, now time.Time) string
 	}
 	rows[p.Height-2] = accent(p.Theme) + footer + reset
 	rows[p.Height-1] = muted + "  ↑/↓ Navigate  ·  Enter Select  ·  Percentages show quota usage" + reset
+	if p.Mode == "session-select" {
+		rows[p.Height-1] = muted + "  ↑/↓ Navigate  ·  esc Back" + reset
+	}
 	return renderRows(rows, p.Width)
 }
 func renderRows(rows []string, width int) string {

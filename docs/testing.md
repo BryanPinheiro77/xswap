@@ -23,6 +23,7 @@ call GitHub, or update the contributor's installed executable.
 | Quota protocol | Handshake, notifications, account and quota responses | Cancellation terminates and waits for the server process |
 | Account health | Fake-CLI authentication confirmation, pending login, API keys, offline list, one-shot watch, stale snapshot preservation, and recovery | Expired login vs network failure; private diagnostic-only cache; cache write failures preserve quota eligibility; reused names reset health |
 | Panel | Bubble Tea navigation, resize, Unicode input, watch/back, enable/disable, removal, thin bars | Zero-sized pseudo-terminals, cancelled removal, and update item hidden without a newer release |
+| Session filters | Latest 20, inclusive 24-hour/7-day boundaries, last-activity ordering, filter switching, selected-only CLI handoff, and All sessions default | Empty results, narrow-terminal recovery controls, invalid options, hidden selections excluded, and failures preserve account selection |
 | Updates | Stable release discovery, caching, confirmed installation, Homebrew routing, Unix atomic replacement, Windows version activation, backup | Homebrew refresh failure; draft/prerelease/invalid tags, invalid repositories, offline/HTTP/JSON errors, oversized responses, checksum mismatch, unsafe/duplicate tar or zip entries, foreign asset URLs, unconfirmed noninteractive install |
 | Release publishing | New and resumed drafts, verified asset reuse, bounded upload retry | Divergent/starter assets replaced; duplicate drafts rejected |
 

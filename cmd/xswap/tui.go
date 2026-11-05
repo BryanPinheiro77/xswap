@@ -75,6 +75,9 @@ type Panel struct {
 	HandoffSources                        []string
 	HandoffProjects                       []sessionProject
 	HandoffSessions                       []codexSession
+	HandoffAllSessions                    []codexSession
+	HandoffTimeFilter                     sessionTimeFilter
+	HandoffFilterTime                     time.Time
 	HandoffSelected, HandoffRunning       map[string]bool
 	HandoffAwaiting                       map[string]bool
 	HandoffUnmanaged                      map[string]bool
@@ -225,6 +228,8 @@ func (p *Panel) useHandoffPlan(plan projectHandoffPlan) {
 	p.HandoffProject = plan.Project
 	p.HandoffSources = plan.Sources
 	p.HandoffSessions = plan.Sessions
+	p.HandoffAllSessions = append([]codexSession{}, plan.Sessions...)
+	p.HandoffFilterTime = time.Now()
 	p.HandoffSelected = map[string]bool{}
 	p.HandoffRunning = map[string]bool{}
 	p.HandoffAwaiting = map[string]bool{}
@@ -250,6 +255,7 @@ func (p *Panel) useHandoffPlan(plan projectHandoffPlan) {
 	for _, conflict := range plan.Conflicts {
 		p.HandoffConflicts[conflict.ID] = append([]codexSession(nil), conflict.Copies...)
 	}
+	p.setSessionTimeFilter(sessionFilterAll)
 }
 
 func (p *Panel) openHandoffProject(a *App, directory string) error {
@@ -332,6 +338,9 @@ func sessionTitle(session codexSession, project string) string {
 }
 
 func (p *Panel) sessionLines(a *App) ([]string, int) {
+	if len(p.HandoffSessions) == 0 {
+		return []string{"", "  No sessions match this filter.", "  Press 4 for All sessions, or Esc to go back."}, 0
+	}
 	lines := []string{}
 	chosen := 0
 	for index, session := range p.HandoffSessions {

@@ -128,6 +128,13 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 			return "", nil
 		}
 	}
+	if p.Mode == "session-select" {
+		filters := map[string]sessionTimeFilter{"1": sessionFilterRecent, "2": sessionFilterDay, "3": sessionFilterWeek, "4": sessionFilterAll}
+		if filter, ok := filters[key]; ok {
+			p.setSessionTimeFilter(filter)
+			return "", nil
+		}
+	}
 	if p.Mode == "session-select" && (key == "a" || key == "A") {
 		selectAll := len(p.selectedSessions()) != len(p.HandoffSessions)
 		for _, session := range p.HandoffSessions {
@@ -187,7 +194,7 @@ func (p *Panel) key(a *App, names []string, key string) (string, error) {
 		} else if p.Mode == "project-select" {
 			p.Cursor = min(p.Cursor+1, len(p.HandoffProjects)-1)
 		} else if p.Mode == "session-select" {
-			p.Cursor = min(p.Cursor+1, len(p.HandoffSessions)-1)
+			p.Cursor = max(0, min(p.Cursor+1, len(p.HandoffSessions)-1))
 		} else if p.Mode == "conflict-source" {
 			p.Cursor = min(p.Cursor+1, len(p.HandoffConflicts[p.HandoffConflictID])-1)
 		} else if p.Mode == "switch" || p.Mode == "project-switch" || p.Mode == "rename" || p.Mode == "disable" || p.Mode == "remove" {
