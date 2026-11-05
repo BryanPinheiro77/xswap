@@ -5,6 +5,8 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ## Unreleased
 
+## v0.9.0 — 2026-11-05
+
 ### Added
 
 - Add optional 5h and 7d auto-switch thresholds, with the global threshold as

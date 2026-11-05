@@ -264,7 +264,9 @@ func TestServiceInstallStopsExistingDetachedMonitor(t *testing.T) {
 	}
 	defer func() { _ = child.Process.Kill(); _ = child.Wait() }()
 	deadline := time.Now().Add(5 * time.Second)
-	for !a.daemonRunning() && time.Now().Before(deadline) {
+	// Poll metadata rather than taking the singleton lock: a readiness probe
+	// can otherwise win the startup race and make the daemon exit as a duplicate.
+	for !exists(filepath.Join(a.Root, "auto-daemon.json")) && time.Now().Before(deadline) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	if !a.daemonRunning() {
