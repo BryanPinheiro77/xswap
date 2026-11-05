@@ -14,6 +14,7 @@ import (
 
 func main() {
 	a := newApp()
+	a.warnSettings(os.Stderr)
 	var err error
 	if filepath.Base(os.Args[0]) == "codex" {
 		a.ensureDaemon()

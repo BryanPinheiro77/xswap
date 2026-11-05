@@ -127,6 +127,27 @@ func TestDoctorInvalidSettingsAreFailureAndDoNotEchoContents(t *testing.T) {
 	}
 }
 
+func TestDoctorUnknownSettingsAreWarnings(t *testing.T) {
+	a := doctorFixture(t)
+	if err := setupDoctorWrappers(t, a); err != nil {
+		t.Fatal(err)
+	}
+	if err := atomicWrite(filepath.Join(a.Root, "settings.json"), []byte(`{"auto":{"threshhold":80}}`)); err != nil {
+		t.Fatal(err)
+	}
+	report := a.doctorReport()
+	if report.ExitCode != 1 {
+		t.Fatalf("unknown settings exit code = %d, want 1", report.ExitCode)
+	}
+	requireDoctorCheck(t, report, "configuration", doctorWarning)
+	requireDoctorCheck(t, report, "auto-switch monitor", doctorPass)
+	var output bytes.Buffer
+	a.doctor(&output)
+	if !strings.Contains(output.String(), "auto.threshhold") || !strings.Contains(output.String(), "correct or remove") {
+		t.Fatal("missing configuration warning or remediation", output.String())
+	}
+}
+
 func TestDoctorReportsExplicitCODEXHomePrecedence(t *testing.T) {
 	a := doctorFixture(t)
 	home := filepath.Join(t.TempDir(), "explicit-profile")

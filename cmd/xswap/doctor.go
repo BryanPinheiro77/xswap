@@ -189,10 +189,17 @@ func (a *App) profileDoctorCheck() doctorCheck {
 
 func (a *App) configurationDoctorCheck() doctorCheck {
 	check := doctorCheck{Name: "configuration"}
-	if _, err := a.settings(); err != nil {
+	s, err := a.settings()
+	if err != nil {
 		check.Status = doctorFail
 		check.Detail = "settings.json is unreadable, invalid JSON, or contains out-of-range values"
 		check.Fix = fmt.Sprintf("back up and repair %q; auto-switch threshold must be 1–100, interval at least 10, cooldown and margin nonnegative", filepath.Join(a.Root, "settings.json"))
+		return check
+	}
+	if warning := s.configurationWarning(); warning != "" {
+		check.Status = doctorWarning
+		check.Detail = warning
+		check.Fix = "correct or remove the listed keys; see the Settings section in docs/usage.md"
 		return check
 	}
 	check.Status = doctorPass

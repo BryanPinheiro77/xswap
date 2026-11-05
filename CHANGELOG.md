@@ -5,6 +5,11 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ## Unreleased
 
+### Added
+
+- Warn about unknown settings keys at startup, in the panel, and in `xswap
+  doctor`, while retaining valid configuration values and legacy defaults.
+
 ## v0.7.0 — 2026-09-28
 
 ### Added

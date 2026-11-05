@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -12,6 +13,74 @@ import (
 	"testing"
 	"time"
 )
+
+func TestUnknownSettingsWarnWithoutLosingValidFields(t *testing.T) {
+	a := fixture(t)
+	data := `{"disabled":["work"],"displayNames":{"custom label":"Work"},"future":"private-value","auto":{"enabled":true,"threshold":82,"interval":45,"threshhold":12,"intervall":15}}`
+	path := filepath.Join(a.Root, "settings.json")
+	if err := atomicWrite(path, []byte(data)); err != nil {
+		t.Fatal(err)
+	}
+	s, err := a.settings()
+	if err != nil || !s.Auto.Enabled || s.Auto.Threshold != 82 || s.Auto.Interval != 45 || s.Auto.Cooldown != 300 || s.Auto.Margin != 5 || !disabled(s, "work") || s.DisplayNames["custom label"] != "Work" {
+		t.Fatal("unknown keys changed valid settings", s, err)
+	}
+	if want := []string{"auto.intervall", "auto.threshhold", "future"}; !reflect.DeepEqual(s.UnknownKeys, want) {
+		t.Fatalf("unknown keys = %v, want %v", s.UnknownKeys, want)
+	}
+	var out bytes.Buffer
+	a.warnSettings(&out)
+	for _, key := range s.UnknownKeys {
+		if !strings.Contains(out.String(), strconv.Quote(key)) {
+			t.Fatalf("warning missing key %q: %s", key, out.String())
+		}
+	}
+	if strings.Contains(out.String(), "private-value") {
+		t.Fatal("warning exposed a setting value")
+	}
+	p := Panel{Mode: "watch", Width: 240, Height: 25, Message: "Account action completed", Records: map[string]Record{}}
+	view := stripANSI(p.render(a, []string{"default"}, s, time.Now()))
+	if !strings.Contains(view, "auto.threshhold") || !strings.Contains(view, p.Message) {
+		t.Fatal("panel must show configuration warnings alongside action feedback", view)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil || string(after) != data {
+		t.Fatal("loading or warning modified settings", err)
+	}
+	if err := a.setEnabled("default", false); err != nil {
+		t.Fatal(err)
+	}
+	s, err = a.settings()
+	if err != nil || s.Auto.Threshold != 82 || s.Auto.Interval != 45 || !disabled(s, "work") || s.DisplayNames["custom label"] != "Work" {
+		t.Fatal("saving lost valid settings", s, err)
+	}
+}
+
+func TestSettingsCompatibilityAndTypoDefaults(t *testing.T) {
+	for _, tc := range []struct {
+		name, data string
+		unknown    []string
+	}{
+		{"legacy", `{"disabled":["work"]}`, nil},
+		{"case insensitive", `{"AUTO":{"THRESHOLD":90},"DISPLAYNAMES":{"arbitrary":"Work"}}`, nil},
+		{"misspelled threshold", `{"auto":{"threshhold":80}}`, []string{"auto.threshhold"}},
+		{"escaped key", `{"auto":{"bad\nkey":1}}`, []string{"auto.bad\nkey"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a := fixture(t)
+			if err := atomicWrite(filepath.Join(a.Root, "settings.json"), []byte(tc.data)); err != nil {
+				t.Fatal(err)
+			}
+			s, err := a.settings()
+			if err != nil || s.Auto.Threshold != 90 || !reflect.DeepEqual(s.UnknownKeys, tc.unknown) {
+				t.Fatal(s, err)
+			}
+			if strings.Contains(s.configurationWarning(), "\n") {
+				t.Fatal("warning contains an unescaped newline")
+			}
+		})
+	}
+}
 
 func TestSelectionRejectsMissingLoginAndInvalidAccounts(t *testing.T) {
 	a := fixture(t)
@@ -38,7 +107,7 @@ func TestSelectionRejectsMissingLoginAndInvalidAccounts(t *testing.T) {
 }
 
 func TestSettingsRejectCorruptionAndInvalidConfiguration(t *testing.T) {
-	for _, data := range []string{"{", `{"auto":{"threshold":0}}`, `{"auto":{"threshold":101}}`, `{"auto":{"interval":1}}`, `{"auto":{"cooldown":-1}}`, `{"auto":{"margin":-1}}`} {
+	for _, data := range []string{"{", `{"auto":{"threshold":0}}`, `{"auto":{"threshold":101}}`, `{"auto":{"interval":1}}`, `{"auto":{"cooldown":-1}}`, `{"auto":{"margin":-1}}`, `{"extra":true,"auto":{"threshold":101}}`, `{"extra":true,"auto":{"interval":"60"}}`} {
 		t.Run(data, func(t *testing.T) {
 			a := fixture(t)
 			if err := atomicWrite(filepath.Join(a.Root, "settings.json"), []byte(data)); err != nil {
