@@ -1,9 +1,10 @@
-<picture>
-  <source media="(prefers-reduced-motion: reduce)" srcset="docs/assets/branding/xswap-mascot.png">
-  <img align="right" src="docs/assets/branding/xswap-mascot.gif" width="112" height="112" alt="XSwap's charcoal mascot hopping and waving a curled ear on a violet tile.">
-</picture>
-
-# XSwap
+<h1>
+  <picture>
+    <source media="(prefers-reduced-motion: reduce)" srcset="docs/assets/branding/xswap-mascot.png">
+    <img align="middle" src="docs/assets/branding/xswap-mascot.gif" width="72" height="72" alt="">
+  </picture>
+  XSwap
+</h1>
 
 **Account switcher for Codex.**
 

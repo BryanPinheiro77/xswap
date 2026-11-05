@@ -11,6 +11,11 @@ tags; unreleased work stays in this section until a release is prepared.
   and a static alternative for reduced motion. Include a GitHub social preview
   card and instructions for maintaining and uploading the brand assets.
 
+### Fixed
+
+- Keep the README title divider below the mascot by placing the image inline
+  inside the heading.
+
 ## v0.9.0 — 2026-11-05
 
 ### Added
