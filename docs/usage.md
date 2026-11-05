@@ -71,6 +71,7 @@ owns its authentication behavior. A pending or invalid login needs an explicit
 xswap project use work
 xswap project current
 xswap project switch account-2
+xswap project switch account-2 --sessions 24h
 xswap project clear
 ```
 
@@ -91,7 +92,8 @@ Choose **Continue sessions with another account…** in the panel, or run
    and each row counts unique conversations across registered accounts;
 2. inside a project, skip that picker and show its conversations directly;
 3. show the chosen project's deduplicated conversations from every account,
-   label each source account, and select all initially;
+   label each source account, and select all initially; use the visible time
+   filter controls to narrow the list;
 4. use `Space` to toggle one conversation, `a` to select or clear all, and
    `Enter` to continue;
 5. for each selected conversation marked as diverged, explicitly choose which
@@ -100,6 +102,34 @@ Choose **Continue sessions with another account…** in the panel, or run
 7. review the project, source, destination, selected conversations, any
    destination copies that will be archived, and number
    of open managed sessions that will restart, then confirm with `Enter` or `y`.
+
+The session picker starts with **All sessions**, so older conversations remain
+visible by default. These shortcuts change the filter without leaving the flow:
+
+| Key | Filter | Included sessions |
+| --- | --- | --- |
+| `1` | Recent sessions | The latest 20 conversations by last activity |
+| `2` | Last 24 hours | Activity at or after 24 hours before the picker opened |
+| `3` | Last 7 days | Activity at or after 7 × 24 hours before the picker opened |
+| `4` | All sessions | Every conversation in the project |
+
+The active filter and all four shortcuts stay above the scrolling list. Sessions
+remain ordered by most recent activity, using the rollout file's modification
+time rather than the conversation's creation date. Time boundaries are fixed
+when the project picker opens its session list, so waiting or moving back from
+destination selection does not make conversations disappear.
+
+Each filter change resets selection to every matching conversation. `Space`
+toggles one, and `a` selects or clears the displayed set. Conversations outside
+the filter are excluded from the handoff. An empty result keeps the filter
+controls available: press `4` to restore all sessions, or `Esc` to go back.
+
+For CLI use, `xswap project switch NAME --sessions recent|24h|7d|all` applies
+the same rules at command start and reports the active filter and match count.
+Omitting `--sessions` preserves the default of all project conversations.
+`--sessions` is accepted only by `project switch`; invalid values and an empty
+filtered result stop before copying sessions or changing account selection.
+Existing confirmation, `--yes`, conflict resolution, and safety checks apply.
 
 Conversation titles prefer the first real user request and skip injected
 environment and AGENTS.md instructions. An agent session with no request of its

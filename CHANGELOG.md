@@ -5,6 +5,13 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ## Unreleased
 
+### Added
+
+- Add visible session handoff filters for the latest 20 conversations, last
+  24 hours, last 7 days, or all sessions. Keyboard shortcuts keep filters
+  available during selection; the CLI accepts `project switch --sessions`
+  with the same choices and continues to include all sessions by default.
+
 ## v0.8.0 — 2026-11-05
 
 ### Added

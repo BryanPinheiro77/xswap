@@ -112,7 +112,10 @@ across every registered account. After choosing a project, the session picker
 shows that complete deduplicated list and identifies each conversation's source
 account. Titles prefer the first real user request; an agent session without one
 shows its parent conversation's request when that parent is available in the
-same account, or **Agent session** otherwise. Every conversation is selected
+same account, or **Agent session** otherwise. The picker starts with **All
+sessions**. Keys `1`–`4` filter to the latest 20 conversations, last 24 hours,
+last 7 days, or all sessions without leaving the flow. Every matching
+conversation is selected
 initially. Use `Space` to toggle one conversation, `a`
 to select or clear all. If a conversation changed independently in multiple
 accounts, the picker marks it as diverged. Deselect it to continue with the
@@ -147,7 +150,8 @@ profile. Selected conversations may come from multiple source accounts and are
 copied into the chosen destination together. XSwap copies no authentication,
 config, cache, or unselected session data during a handoff. The CLI command
 `xswap project switch NAME` selects every conversation in the project for
-non-panel workflows.
+non-panel workflows. Add `--sessions recent|24h|7d|all` to choose the same filters
+explicitly from the CLI; omitting it keeps all sessions.
 
 A confirmed project handoff also makes the destination the account used by
 future `codex` processes in that project. A handoff from the user home updates

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 func main() {
@@ -63,6 +64,7 @@ func usage() {
   xswap switch NAME             Select an account for new Codex processes
   xswap project use NAME        Pin an account to the current project
   xswap project switch NAME     Copy this project's sessions and switch account
+                                --sessions recent|24h|7d|all (default: all)
   xswap project clear           Remove the current project's account pin
   xswap project current         Show the effective account for this directory
   xswap run NAME -- [ARGS]       Run an account without changing selection
@@ -115,7 +117,7 @@ func parse(args []string) (Options, error) {
 		switch key {
 		case "device-auth", "all", "yes", "once", "dry-run", "check":
 			o.Flags[key] = true
-		case "threshold", "interval", "repo", "label", "path":
+		case "threshold", "interval", "repo", "label", "path", "sessions":
 			i++
 			if i >= len(args) {
 				return o, fmt.Errorf("--%s requires a value", key)
@@ -184,6 +186,9 @@ func (a *App) run(args []string) error {
 	o, err := parse(args[1:])
 	if err != nil {
 		return err
+	}
+	if _, ok := o.Values["sessions"]; ok {
+		return errors.New("--sessions is only supported by xswap project switch")
 	}
 	if o.Flags["help"] {
 		usage()
@@ -366,6 +371,16 @@ func (a *App) projectCommand(args []string) error {
 	if err != nil {
 		return err
 	}
+	filter := sessionFilterAll
+	if value, ok := o.Values["sessions"]; ok {
+		if args[0] != "switch" {
+			return errors.New("--sessions is only supported by xswap project switch")
+		}
+		filter, err = parseSessionTimeFilter(value)
+		if err != nil {
+			return err
+		}
+	}
 	directory := o.Values["path"]
 	if directory == "" {
 		directory = currentDirectory()
@@ -383,12 +398,13 @@ func (a *App) projectCommand(args []string) error {
 		return nil
 	case "switch":
 		if len(o.Names) != 1 {
-			return errors.New("usage: xswap project switch NAME [--path DIR] [--yes]")
+			return errors.New("usage: xswap project switch NAME [--path DIR] [--sessions recent|24h|7d|all] [--yes]")
 		}
-		plan, planErr := a.planProjectHandoff(directory, o.Names[0])
+		plan, planErr := a.planFilteredProjectHandoff(directory, o.Names[0], filter, time.Now())
 		if planErr != nil {
 			return planErr
 		}
+		fmt.Printf("Session filter: %s · %d conversation(s).\n", filter.label(), len(plan.Sessions))
 		if !o.Flags["yes"] {
 			if !interactive() {
 				return errors.New("use --yes to confirm a project account switch in scripts")

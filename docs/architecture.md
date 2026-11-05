@@ -103,6 +103,17 @@ archive failure leaves the destination in place, and a copy failure restores
 the archived file. Other account copies remain untouched. A single confirmation can therefore consolidate
 selected conversations from multiple source accounts into one destination.
 
+Session time filters operate on the deduplicated project-session snapshot,
+ordered by last activity (`Updated`, derived from the rollout modification
+time). The picker starts with all sessions. Recent means the latest 20; rolling
+24-hour and 7-day cutoffs are inclusive and anchored when the picker opens.
+Changing filters selects all matching sessions and clears hidden selections,
+while keeping the complete snapshot available for restoring all sessions.
+The CLI's optional `project switch --sessions` uses the same filtering rules
+and passes explicit conversation IDs through the existing handoff planner and
+its final safety recheck. It defaults to all sessions; an empty filtered set
+never falls back to transferring everything.
+
 Repository and directory scopes use `.xswap-account`. Git repositories receive
 a local `/.xswap-account` rule in `.git/info/exclude` before the pin is written;
 linked worktrees resolve their common Git metadata directory. A handoff rooted
