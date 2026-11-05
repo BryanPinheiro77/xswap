@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-reduced-motion: reduce)" srcset="docs/assets/branding/xswap-mascot.png">
+  <img align="right" src="docs/assets/branding/xswap-mascot.gif" width="112" height="112" alt="XSwap's charcoal mascot with curled ears and ivory eyes on a violet tile.">
+</picture>
+
 # XSwap
 
 **Account switcher for Codex.**
@@ -252,6 +257,7 @@ quota payloads.
 - [Code of conduct](.github/CODE_OF_CONDUCT.md)
 - [Changelog](CHANGELOG.md)
 - [Release process](docs/releasing.md)
+- [Brand assets and social preview](docs/branding.md)
 - [GitHub setup and branch protections](docs/github-setup.md)
 
 The interface and primary documentation use English. Brazilian Portuguese
