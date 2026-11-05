@@ -193,7 +193,7 @@ func (a *App) configurationDoctorCheck() doctorCheck {
 	if err != nil {
 		check.Status = doctorFail
 		check.Detail = "settings.json is unreadable, invalid JSON, or contains out-of-range values"
-		check.Fix = fmt.Sprintf("back up and repair %q; auto-switch threshold must be 1–100, interval at least 10, cooldown and margin nonnegative", filepath.Join(a.Root, "settings.json"))
+		check.Fix = fmt.Sprintf("back up and repair %q; global and optional 5h/7d thresholds must be 1–100, interval at least 10, cooldown and margin nonnegative", filepath.Join(a.Root, "settings.json"))
 		return check
 	}
 	if warning := s.configurationWarning(); warning != "" {

@@ -228,6 +228,8 @@ these subscription quota windows.
 ```sh
 xswap auto on
 xswap auto on --threshold 80 --interval 60
+xswap auto status --threshold-5h 90 --threshold-7d 80
+xswap auto status --threshold-7d global
 xswap auto status
 xswap auto view
 xswap auto --once --dry-run
@@ -239,8 +241,52 @@ short-window or weekly Codex quota. It chooses another eligible account with the
 most remaining quota, requires at least five percentage points of improvement,
 and waits five minutes between switches. Unknown or stale quotas hold selection.
 
+Optional window limits let you switch at different usage levels for 5h and 7d:
+
+```sh
+# Configure while the monitor is off, then enable it explicitly when ready.
+xswap auto status --threshold 90 --threshold-5h 90 --threshold-7d 80
+xswap auto on
+# Restore the weekly window to the current global threshold.
+xswap auto status --threshold-7d global
+# Preview temporary rules without saving them or changing selection.
+xswap auto --once --dry-run --threshold-5h 85 --threshold-7d 75
+```
+
+Each explicit window limit must be an integer from 1 to 100. It overrides the
+global threshold for that window only. Missing or `null` window settings use
+the global threshold; CLI value `global` clears an override. Changing the
+global threshold leaves explicit overrides intact. These options work with
+`auto on`, `off`, `status`, and one-shot checks; set them with `auto status`
+before opening `auto view`.
+
+Rotation triggers when **either** main Codex window reaches its effective
+threshold. A destination must be strictly below every applicable threshold.
+For ranking, XSwap measures each window's headroom (threshold minus usage) and
+uses the smallest headroom for that account. The account with the greatest
+minimum headroom wins, with name order breaking ties. It must improve that
+minimum headroom by at least the configured margin (five percentage points by
+default). With equal thresholds this gives exactly the existing highest-usage
+comparison and five-point improvement rule.
+
+For example, with limits of 90% for 5h and 80% for 7d, usage of 30%/80%
+triggers rotation with zero minimum headroom. A destination at 85%/20% has
+five points of minimum headroom and qualifies; one at 86%/20% improves by only
+four points and does not. A destination at or above 80% weekly never qualifies.
+
+Windows are matched by their reported duration (300 and 10080 minutes), not
+their position in a response. Other main-bucket window durations use the global
+threshold. If an explicitly configured window is missing, XSwap cannot evaluate
+the rule: the active account holds selection and such candidates are excluded.
+Existing missing, stale, expired, and invalid quota protections still apply.
+Reserve/model buckets do not drive rotation. Per-window limits do not shorten
+the cooldown, including the cooldown after manual selection. Settings, disabled
+accounts, and the active selection are rechecked under the state lock; one-shot
+overrides apply only to explicitly supplied fields of that fresh configuration.
+
 The view shows status, account eligibility, and recent switches. Press `e` to
-enable or stop the monitor; `+`/`-` change the threshold. The detached monitor
+enable or stop the monitor; `+`/`-` change only the global fallback threshold.
+Effective 5h/7d limits and minimum headroom appear in the view. The detached monitor
 continues after the view closes. Auto-switch changes **newly launched Codex
 processes**, not a running conversation. Use the confirmed project-switch action
 when a project's managed sessions should move immediately.
@@ -261,9 +307,11 @@ files support these keys:
 | `displayNames` | `{}` | Object mapping account names to display labels |
 | `auto.enabled` | `false` | Boolean |
 | `auto.threshold` | `90` | Integer from 1 to 100, percent used |
+| `auto.threshold5h` | Global threshold | Optional integer from 1 to 100, or `null` to inherit |
+| `auto.threshold7d` | Global threshold | Optional integer from 1 to 100, or `null` to inherit |
 | `auto.interval` | `60` | Integer of at least 10 seconds |
 | `auto.cooldown` | `300` | Nonnegative integer, seconds |
-| `auto.margin` | `5` | Nonnegative integer, percentage points |
+| `auto.margin` | `5` | Nonnegative integer, percentage points of minimum-headroom improvement |
 
 Missing fields retain their defaults, including files written by older XSwap
 versions. Existing case-insensitive field names remain accepted. Unknown keys

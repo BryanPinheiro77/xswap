@@ -136,7 +136,7 @@ func containsEnv(env []string, item string) bool {
 }
 func TestAutoSwitchDecisions(t *testing.T) {
 	now := time.Now().Unix()
-	s := Settings{Auto: AutoConfig{true, 90, 60, 300, 5}}
+	s := Settings{Auto: AutoConfig{Enabled: true, Threshold: 90, Interval: 60, Cooldown: 300, Margin: 5}}
 	records := map[string]Record{"default": quota(95, 80, now), "work": quota(20, 40, now), "other": quota(70, 30, now)}
 	target, _ := decide(records, "default", s, now, 0)
 	if target != "work" {

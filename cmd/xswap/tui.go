@@ -491,7 +491,11 @@ func (p *Panel) autoLines(a *App, s Settings, now time.Time) []string {
 	if s.Auto.Enabled && a.daemonRunning() {
 		running = "running"
 	}
-	lines := []string{accent(p.Theme) + bold + fmt.Sprintf("  Auto-switch %s  ·  monitor %s", status, running) + reset, muted + fmt.Sprintf("  Threshold %d%%  ·  refresh %ds  ·  cooldown %ds", s.Auto.Threshold, s.Auto.Interval, s.Auto.Cooldown) + reset, muted + "  Uses 5h / 7d Codex quotas. Disabled accounts are excluded." + reset, muted + "  Changes NEW Codex processes; running processes keep their account." + reset, ""}
+	lines := []string{accent(p.Theme) + bold + fmt.Sprintf("  Auto-switch %s  ·  monitor %s", status, running) + reset,
+		muted + "  " + s.Auto.thresholdSummary() + reset,
+		muted + fmt.Sprintf("  Refresh %ds · cooldown %ds · +/- global", s.Auto.Interval, s.Auto.Cooldown) + reset,
+		muted + "  Uses 5h / 7d Codex quotas. Disabled accounts are excluded." + reset,
+		muted + "  Changes NEW Codex processes; running processes keep their account." + reset, ""}
 	previous := a.autoState()
 	message := previous.Message
 	if message == "" {
@@ -511,7 +515,13 @@ func (p *Panel) autoLines(a *App, s Settings, now time.Time) []string {
 		if quotaRecordState(record) == quotaStale {
 			note = "quotas stale — excluded from rotation"
 		} else if score, valid := quotaScore(record, now.Unix(), max(120, s.Auto.Interval*2)); valid {
-			note = fmt.Sprintf("%g%% used · %g%% remaining", score, max(0, 100-score))
+			if pressure, valid := rotationPressure(record, s.Auto, now.Unix(), max(120, s.Auto.Interval*2)); !valid {
+				note = "configured quota window unavailable — excluded"
+			} else if pressure >= 0 {
+				note = fmt.Sprintf("%g%% used · at window limit", score)
+			} else {
+				note = fmt.Sprintf("%g%% used · %gpp below limits", score, -pressure)
+			}
 		}
 		if disabled(s, name) {
 			note = "disabled — excluded from rotation"

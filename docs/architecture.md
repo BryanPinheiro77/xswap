@@ -17,6 +17,7 @@ in `.github/` and longer guides in `docs/`.
 | `rpc.go` | Official Codex process execution and app-server quota queries |
 | `health.go` | Authentication observations, safe health metadata, and status text |
 | `auto.go` | Background monitor, quota scoring, and rotation decisions |
+| `auto_threshold.go` | Per-window thresholds, shared rotation policy, and explicit overrides |
 | `update.go` | GitHub release checks, archive validation, and atomic executable updates |
 | `install_unix.go`, `install_windows.go` | Platform command installation and removal |
 | `process_unix.go`, `process_windows.go` | Platform process and terminal primitives |
@@ -183,19 +184,34 @@ into the following prompt.
 ## Automatic rotation
 
 Auto-switch is disabled initially. Enabling it starts a detached monitor with a
-singleton file lock. The monitor polls enabled accounts and scores the main Codex
-bucket by the greater usage of its short and weekly windows. Reserve/model buckets
+singleton file lock. The monitor polls enabled accounts and evaluates the main Codex
+bucket's short and weekly windows against their effective limits. Reserve/model buckets
 are displayed but do not drive rotation in this version.
 
-Once active-account usage reaches the configured threshold, a candidate must be
-below that threshold and improve usage by at least five percentage points. The
-lowest usage wins; name order breaks ties. A five-minute cooldown prevents rapid
-rotation, including immediately after a manual selection.
+The global usage threshold defaults to 90%. Optional `threshold5h` and
+`threshold7d` settings override it for windows with matching reported durations
+of 300 and 10080 minutes. Missing or null overrides inherit the global value;
+unrecognized durations also use that global fallback. An explicitly configured
+window must be present to evaluate an account safely.
+
+Rotation uses the worst window pressure: the maximum of usage minus that
+window's effective threshold. Nonnegative pressure triggers a check; candidates
+must have negative pressure in every window and improve worst pressure by at
+least the margin (five percentage points by default). Lowest pressure wins,
+with account name breaking ties. Equivalently, this maximizes the minimum
+headroom to any threshold. Equal thresholds reduce exactly to the previous
+maximum-usage score and margin. Trigger, landing eligibility, and auto-view
+status share this function. The view and CLI show effective 5h/7d limits and
+the global fallback. A five-minute cooldown prevents rapid rotation, including
+immediately after a manual selection.
 
 Read errors, expired windows, missing quotas, stale snapshots, API-key auth, and
 disabled accounts cannot become candidates. A disabled active account holds its
 selection. The active account and settings are rechecked under a state lock before
 commit, so concurrent manual selection or turning auto-switch off wins.
+One-shot checks apply only explicitly supplied overrides to settings reread
+under that lock, preserving concurrent changes to other window limits,
+cooldown, margin, and disabled accounts. They never save those overrides.
 
 The monitor continues after closing the panel. After a reboot, starting `xswap`
 or `codex` restarts an enabled monitor. An optional launchd LaunchAgent on macOS

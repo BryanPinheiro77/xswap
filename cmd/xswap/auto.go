@@ -64,15 +64,15 @@ func decide(records map[string]Record, active string, s Settings, now, last int6
 	if disabled(s, active) {
 		return "", "Active account is disabled for rotation; selection held."
 	}
-	current, ok := quotaScore(records[active], now, max(120, s.Auto.Interval*2))
+	current, ok := rotationPressure(records[active], s.Auto, now, max(120, s.Auto.Interval*2))
 	if !ok {
 		return "", "Active account quotas unavailable; selection held."
 	}
-	if current < float64(s.Auto.Threshold) {
-		return "", fmt.Sprintf("Active account is below the %d%% threshold.", s.Auto.Threshold)
+	if current < 0 {
+		return "", "Active account is below its window thresholds (" + s.Auto.thresholdSummary() + ")."
 	}
 	if now-last < int64(s.Auto.Cooldown) {
-		return "", "Waiting for the 5-minute cooldown between switches."
+		return "", fmt.Sprintf("Waiting for the %ds cooldown between switches.", s.Auto.Cooldown)
 	}
 	type candidate struct {
 		name  string
@@ -83,8 +83,8 @@ func decide(records map[string]Record, active string, s Settings, now, last int6
 		if name == active || disabled(s, name) {
 			continue
 		}
-		score, ok := quotaScore(record, now, max(120, s.Auto.Interval*2))
-		if ok && score < float64(s.Auto.Threshold) && current-score >= float64(s.Auto.Margin) {
+		score, ok := rotationPressure(record, s.Auto, now, max(120, s.Auto.Interval*2))
+		if ok && score < 0 && current-score >= float64(s.Auto.Margin) {
 			candidates = append(candidates, candidate{name, score})
 		}
 	}
@@ -98,7 +98,7 @@ func decide(records map[string]Record, active string, s Settings, now, last int6
 		return candidates[i].score < candidates[j].score
 	})
 	target := candidates[0].name
-	return target, fmt.Sprintf("%s reached %g%% usage; best alternative: %s.", active, current, target)
+	return target, fmt.Sprintf("%s reached a window threshold (%s); best alternative: %s.", active, s.Auto.thresholdSummary(), target)
 }
 func (a *App) collect(ctx context.Context) map[string]Record {
 	records := map[string]Record{}
@@ -123,7 +123,7 @@ func (a *App) collect(ctx context.Context) map[string]Record {
 	}
 	return records
 }
-func (a *App) evaluate(records map[string]Record, active string, dryRun, force bool, overrides ...AutoConfig) (AutoState, error) {
+func (a *App) evaluate(records map[string]Record, active string, dryRun, force bool, overrides ...autoOverrides) (AutoState, error) {
 	result := AutoState{}
 	err := a.withState(func() error {
 		s, err := a.settings()
@@ -135,7 +135,10 @@ func (a *App) evaluate(records map[string]Record, active string, dryRun, force b
 			return nil
 		}
 		if len(overrides) > 0 {
-			s.Auto = overrides[0]
+			overrides[0].apply(&s.Auto)
+			if err := s.Auto.validate(); err != nil {
+				return err
+			}
 		}
 		if a.selected() != active {
 			result.Message = "Selection changed during the query; waiting for a fresh check."
@@ -178,7 +181,7 @@ func (a *App) evaluate(records map[string]Record, active string, dryRun, force b
 	})
 	return result, err
 }
-func (a *App) configureAuto(enabled bool, threshold, interval int) error {
+func (a *App) configureAuto(enabled bool, threshold, interval int, windows ...windowThresholdOverrides) error {
 	if threshold != 0 && (threshold < 1 || threshold > 100) {
 		return errors.New("threshold must be between 1 and 100%")
 	}
@@ -191,11 +194,13 @@ func (a *App) configureAuto(enabled bool, threshold, interval int) error {
 			return err
 		}
 		s.Auto.Enabled = enabled
-		if threshold != 0 {
-			s.Auto.Threshold = threshold
+		overrides := autoOverrides{Threshold: threshold, Interval: interval}
+		if len(windows) > 0 {
+			overrides.Windows = windows[0]
 		}
-		if interval != 0 {
-			s.Auto.Interval = interval
+		overrides.apply(&s.Auto)
+		if err := s.Auto.validate(); err != nil {
+			return err
 		}
 		return writeJSON(filepath.Join(a.Root, "settings.json"), s)
 	})
@@ -303,9 +308,6 @@ func (a *App) autoCommand(operation string, o Options) error {
 	if o.Flags["once"] {
 		operation = "once"
 	}
-	if operation == "view" {
-		return a.dashboard("auto", "", 60)
-	}
 	threshold, err := o.integer("threshold", 0)
 	if err != nil {
 		return err
@@ -320,18 +322,28 @@ func (a *App) autoCommand(operation string, o Options) error {
 	if interval < 0 || (o.Values["interval"] != "" && interval < 10) {
 		return errors.New("minimum refresh interval is 10 seconds")
 	}
+	windows, err := parseWindowThresholdOverrides(o)
+	if err != nil {
+		return err
+	}
+	if operation == "view" {
+		if threshold != 0 || interval != 0 || len(windows) > 0 {
+			return errors.New("set auto-switch options with xswap auto status before opening auto view")
+		}
+		return a.dashboard("auto", "", 60)
+	}
 	s, err := a.settings()
 	if err != nil {
 		return err
 	}
 	switch operation {
 	case "on", "off":
-		err = a.configureAuto(operation == "on", threshold, interval)
+		err = a.configureAuto(operation == "on", threshold, interval, windows)
 	case "once":
 		// Single checks use temporary overrides and never alter monitor settings.
 	case "status":
-		if threshold != 0 || interval != 0 {
-			err = a.configureAuto(s.Auto.Enabled, threshold, interval)
+		if threshold != 0 || interval != 0 || len(windows) > 0 {
+			err = a.configureAuto(s.Auto.Enabled, threshold, interval, windows)
 		}
 	default:
 		return errors.New("usage: xswap auto on|off|status|view or xswap auto --once --dry-run")
@@ -341,13 +353,7 @@ func (a *App) autoCommand(operation string, o Options) error {
 	}
 	if operation == "once" {
 		active := a.selected()
-		effective := s.Auto
-		if threshold != 0 {
-			effective.Threshold = threshold
-		}
-		if interval != 0 {
-			effective.Interval = interval
-		}
+		effective := autoOverrides{Threshold: threshold, Interval: interval, Windows: windows}
 		result, err := a.evaluate(a.collect(context.Background()), active, o.Flags["dry-run"], true, effective)
 		if err != nil {
 			return err
@@ -367,7 +373,7 @@ func (a *App) autoCommand(operation string, o Options) error {
 	if s.Auto.Enabled {
 		status = "on"
 	}
-	fmt.Printf("Auto-switch: %s · threshold %d%% · refresh %ds\n", status, s.Auto.Threshold, s.Auto.Interval)
+	fmt.Printf("Auto-switch: %s · %s · refresh %ds\n", status, s.Auto.thresholdSummary(), s.Auto.Interval)
 	if s.Auto.Enabled {
 		fmt.Printf("Background monitor running: %t\n", a.daemonRunning())
 	}
