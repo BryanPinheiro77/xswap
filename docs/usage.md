@@ -25,6 +25,53 @@ their original account. Selection does not alter the Codex desktop application.
 The installed `codex` wrapper supervises new terminal sessions automatically;
 you do not need to open the `xswap` panel first.
 
+## Shell completions
+
+Generate completions with `xswap completion bash`, `xswap completion zsh`, or
+`xswap completion fish`. They support both `xswap` and the `codex-swap` alias.
+Commands, command-specific options, project/service/auto operations, session
+filters, and registered account names are suggested as you type. New accounts
+appear without regenerating the script. Arguments after `xswap run NAME` are
+left to Codex; XSwap does not complete Codex commands.
+
+For bash, save the script and source it from `~/.bashrc` (or `~/.bash_profile`
+if that is the startup file used by your terminal):
+
+```sh
+mkdir -p ~/.local/share/xswap
+xswap completion bash > ~/.local/share/xswap/completion.bash
+echo 'source ~/.local/share/xswap/completion.bash' >> ~/.bashrc
+source ~/.local/share/xswap/completion.bash
+```
+
+For zsh, save the script and source it **after** `compinit` in `~/.zshrc`:
+
+```sh
+mkdir -p ~/.local/share/xswap
+xswap completion zsh > ~/.local/share/xswap/completion.zsh
+```
+
+```zsh
+# Add to ~/.zshrc; omit compinit here if your shell framework already runs it.
+autoload -Uz compinit
+compinit
+source ~/.local/share/xswap/completion.zsh
+```
+
+For fish, install into its completions directory and restart the shell:
+
+```fish
+mkdir -p ~/.config/fish/completions
+xswap completion fish > ~/.config/fish/completions/xswap.fish
+cp ~/.config/fish/completions/xswap.fish ~/.config/fish/completions/codex-swap.fish
+```
+
+Suggestions inspect local profile registration metadata only. They do not read
+credential contents, query quotas, start Codex or the rotation monitor, or change
+selection or settings. Account names are visible in suggestions; display labels
+and email addresses are not included. Free-form values such as paths, labels,
+repository names, and numeric thresholds are entered manually.
+
 ## Account health and authentication
 
 `xswap list` stays offline. It shows the last saved health observation and its

@@ -7,6 +7,9 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ### Added
 
+- Add generated bash, zsh, and fish completions for public commands, options,
+  and registered account names, with offline suggestions that leave account
+  selection and background rotation unchanged.
 - Add the purple XSwap mascot to the README with frontal hops, an ear wave,
   and a static alternative for reduced motion. Include a GitHub social preview
   card and instructions for maintaining and uploading the brand assets.
