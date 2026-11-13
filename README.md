@@ -105,6 +105,10 @@ xswap doctor                  # Check installation and account-manager health
 Optional [shell completions](docs/usage.md#shell-completions) are available for
 bash, zsh, and fish through `xswap completion SHELL`.
 
+Move account setup between machines with `xswap export FILE` and `xswap import
+FILE`. [Configuration transfer](docs/usage.md#export-and-import-configuration)
+includes names and preferences; each imported account requires a fresh login.
+
 No prior login or logout is needed: `add` logs in directly inside a new profile.
 The menu offers global and project switching, watching, auto-switch status,
 adding, enable/disable, removal, theme, and quit. Arrow keys navigate; Enter

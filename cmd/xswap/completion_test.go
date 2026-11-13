@@ -38,6 +38,8 @@ func TestCompletionContexts(t *testing.T) {
 		{[]string{"rename", "--label", ""}, nil},
 		{[]string{"add", "w"}, nil},
 		{[]string{"add", "new-account", "--d"}, []string{"--device-auth"}},
+		{[]string{"import", "/a config.json", "--s"}, []string{"--skip-existing"}},
+		{[]string{"export", "/a config.json", "--s"}, nil},
 		{[]string{"auto", "view", "--t"}, nil},
 		{[]string{"switch", "work", "w"}, nil},
 		{[]string{"limits", "--all", "w"}, nil},
@@ -212,7 +214,7 @@ func TestCompletionMetadataCoversParserOptions(t *testing.T) {
 		}
 	}
 	visit(completionCommands)
-	for _, key := range []string{"device-auth", "all", "yes", "once", "dry-run", "check", "threshold", "threshold-5h", "threshold-7d", "interval", "repo", "label", "path", "sessions"} {
+	for _, key := range []string{"device-auth", "all", "yes", "once", "dry-run", "check", "skip-existing", "apply-auto", "threshold", "threshold-5h", "threshold-7d", "interval", "repo", "label", "path", "sessions"} {
 		if !seen["--"+key] {
 			t.Errorf("parser option --%s has no completion", key)
 		}
