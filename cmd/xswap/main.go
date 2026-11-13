@@ -16,7 +16,9 @@ import (
 
 func main() {
 	a := newApp()
-	a.warnSettings(os.Stderr)
+	if len(os.Args) < 2 || (os.Args[1] != "__complete" && os.Args[1] != "completion") {
+		a.warnSettings(os.Stderr)
+	}
 	var err error
 	if filepath.Base(os.Args[0]) == "codex" {
 		a.ensureDaemon()
@@ -88,6 +90,7 @@ func usage() {
   xswap uninstall               Restore the original Codex command
   xswap version                 Show version, commit, and build date
   xswap doctor                  Diagnose XSwap installation and account setup
+  xswap completion SHELL        Print completions for bash, zsh, or fish
   xswap update --check          Check published GitHub releases
   xswap update                  Install the latest update after confirmation
 
@@ -118,14 +121,15 @@ func parse(args []string) (Options, error) {
 		switch key {
 		case "device-auth", "all", "yes", "once", "dry-run", "check":
 			o.Flags[key] = true
-		case "threshold", "threshold-5h", "threshold-7d", "interval", "repo", "label", "path", "sessions":
+		default:
+			if !valueOption(key) {
+				return o, fmt.Errorf("unknown option: %s", arg)
+			}
 			i++
 			if i >= len(args) {
 				return o, fmt.Errorf("--%s requires a value", key)
 			}
 			o.Values[key] = args[i]
-		default:
-			return o, fmt.Errorf("unknown option: %s", arg)
 		}
 	}
 	return o, nil
@@ -149,6 +153,12 @@ func (a *App) run(args []string) error {
 		return a.list()
 	}
 	action := args[0]
+	if action == "__complete" {
+		return a.writeCompletions(os.Stdout, args[1:])
+	}
+	if action == "completion" {
+		return completionCommand(os.Stdout, args[1:])
+	}
 	if action == "__codex" {
 		a.ensureDaemon()
 		name := a.selected()

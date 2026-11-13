@@ -59,6 +59,11 @@ jobs:
         run: make check-fmt
       - name: Vet
         run: go vet ./...
+      - name: Install shells for completion tests
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes zsh fish
       - name: Behavioral tests and race detection
         run: go test -race ./...
       - name: Build
