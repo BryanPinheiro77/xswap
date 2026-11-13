@@ -7,6 +7,10 @@ tags; unreleased work stays in this section until a release is prepared.
 
 ### Added
 
+- Add versioned configuration export/import for registered account names,
+  labels, disabled state, and optional auto-switch policy. Imports validate
+  before committing, preserve existing accounts and selection, and create
+  login-pending profiles without copying credentials or Codex data.
 - Add generated bash, zsh, and fish completions for public commands, options,
   and registered account names, with offline suggestions that leave account
   selection and background rotation unchanged.

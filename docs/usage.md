@@ -459,6 +459,67 @@ On Windows, the installer similarly keeps `%LOCALAPPDATA%\XSwap\bin` first in
 the user `PATH`. `xswap uninstall` stops auto-switch and removes this integration
 without deleting account data or the official CLI.
 
+## Export and import configuration
+
+Export manager preferences to a new file outside the manager and original
+Codex directories:
+
+```sh
+xswap export ./xswap-config.json
+```
+
+The version 1 JSON format contains `format: "xswap-config"`, `version: 1`, an
+`accounts` array of names, optional display labels, and disabled flags, plus
+`auto` settings (global/window thresholds, interval, cooldown, margin, and the
+saved enabled state). Only registered profiles and `default` are exported;
+metadata for removed accounts is omitted. The file is created privately and an
+existing file is never overwritten.
+
+Exports exclude authentication tokens, account identities and emails, Codex
+configuration, skills, session databases, conversations, quota/health caches,
+project pins, installation paths, and the active selection. Names and labels
+are included exactly as configured, so inspect those before sharing an export.
+
+On the destination machine, preview and then import:
+
+```sh
+xswap import ./xswap-config.json --dry-run
+xswap import ./xswap-config.json
+xswap login work
+```
+
+Import creates private registration markers only. Sign in separately to each
+new profile; it cannot be selected or used for automatic rotation until its
+login is available. Import never reads or copies the original account's files.
+Its metadata and the active selection, last-switch timestamp, and monitor's
+enabled state remain unchanged. The exported `default` entry is always skipped.
+
+Existing account paths stop the entire import before profiles are created. Use
+`--skip-existing` to keep registered existing profiles and their metadata while
+importing other names. Unregistered leftover paths and symlinks are still
+rejected. Names are compared case-insensitively to keep exports portable.
+
+Auto-switch parameters are preserved locally by default. To adopt the exported
+thresholds, interval, cooldown, and margin, add `--apply-auto`. The saved
+`auto.enabled` value is informational: importing never enables or disables
+rotation and never starts the monitor. Manage that separately with `xswap auto
+on` or `xswap auto off`.
+
+```sh
+xswap import ./xswap-config.json --skip-existing --apply-auto --dry-run
+xswap import ./xswap-config.json --skip-existing --apply-auto
+```
+
+The reader rejects unsupported versions, unknown/duplicate fields, null required
+fields, duplicate or unsafe names, control characters in labels, invalid
+auto-switch values, files over 1 MiB, and more than 1024 account entries. Transfer
+files must be regular files; keep them outside account storage. Resolve corrupt
+or unknown local settings before importing. Imports recheck conflicts under the
+state lock, stage profile markers, reset stale observations for newly imported
+names, and roll back published markers and observations if a write fails. An
+interrupted process may leave partial login-pending registrations; resolve those
+paths before retrying, or use `--skip-existing` to retain registered profiles.
+
 ## Diagnose installation problems
 
 Run `xswap doctor` for an offline check of the XSwap version and platform,
