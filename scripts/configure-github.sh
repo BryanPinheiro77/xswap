@@ -13,7 +13,7 @@ command -v jq >/dev/null
 gh auth status >/dev/null
 
 gh api --method PATCH "repos/$repo" \
-  -F allow_squash_merge=true -F allow_merge_commit=false -F allow_rebase_merge=false \
+  -F allow_squash_merge=false -F allow_merge_commit=true -F allow_rebase_merge=false \
   -F delete_branch_on_merge=true -F allow_auto_merge=false >/dev/null
 gh api --method PUT "repos/$repo/private-vulnerability-reporting" >/dev/null
 

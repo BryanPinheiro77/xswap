@@ -42,7 +42,7 @@ sh scripts/configure-github.sh OWNER/xswap --solo
 ```
 
 The script creates or updates named rulesets, enables private vulnerability
-reporting, sets squash-only merges, and creates issue/release labels.
+reporting, permits merge commits only, and creates issue/release labels.
 
 | Rule | Result |
 | --- | --- |
