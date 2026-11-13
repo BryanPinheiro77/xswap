@@ -40,7 +40,8 @@ base branches fail the branch policy check. Do not push directly to protected
 branches or rewrite published release tags.
 
 Use descriptive commits. Conventional Commit prefixes (`feat:`, `fix:`, `docs:`,
-`test:`, `ci:`) help scan changes but are not mandatory. Maintainers squash merges.
+`test:`, `ci:`) help scan changes but are not mandatory. Maintainers use merge
+commits to preserve feature-branch history; squash and rebase merges are disabled.
 
 ## Review expectations
 
