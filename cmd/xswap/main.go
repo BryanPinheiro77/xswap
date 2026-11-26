@@ -90,6 +90,8 @@ func usage() {
   xswap uninstall               Restore the original Codex command
   xswap version                 Show version, commit, and build date
   xswap doctor                  Diagnose XSwap installation and account setup
+  xswap export FILE             Export account configuration without credentials
+  xswap import FILE             Import configuration; new accounts need login
   xswap completion SHELL        Print completions for bash, zsh, or fish
   xswap update --check          Check published GitHub releases
   xswap update                  Install the latest update after confirmation
@@ -119,7 +121,7 @@ func parse(args []string) (Options, error) {
 		}
 		key := strings.TrimPrefix(arg, "--")
 		switch key {
-		case "device-auth", "all", "yes", "once", "dry-run", "check":
+		case "device-auth", "all", "yes", "once", "dry-run", "check", "skip-existing", "apply-auto":
 			o.Flags[key] = true
 		default:
 			if !valueOption(key) {
@@ -153,6 +155,9 @@ func (a *App) run(args []string) error {
 		return a.list()
 	}
 	action := args[0]
+	if action == "export" || action == "import" {
+		return a.transferCommand(action, args[1:], os.Stdout)
+	}
 	if action == "__complete" {
 		return a.writeCompletions(os.Stdout, args[1:])
 	}
@@ -197,6 +202,9 @@ func (a *App) run(args []string) error {
 	o, err := parse(args[1:])
 	if err != nil {
 		return err
+	}
+	if o.Flags["skip-existing"] || o.Flags["apply-auto"] {
+		return errors.New("--skip-existing and --apply-auto are only supported by xswap import")
 	}
 	if _, ok := o.Values["sessions"]; ok {
 		return errors.New("--sessions is only supported by xswap project switch")
@@ -389,6 +397,9 @@ func (a *App) projectCommand(args []string) error {
 	o, err := parse(args[1:])
 	if err != nil {
 		return err
+	}
+	if o.Flags["skip-existing"] || o.Flags["apply-auto"] {
+		return errors.New("--skip-existing and --apply-auto are only supported by xswap import")
 	}
 	for _, key := range []string{"threshold-5h", "threshold-7d"} {
 		if _, present := o.Values[key]; present {

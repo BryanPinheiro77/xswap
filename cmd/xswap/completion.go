@@ -12,13 +12,14 @@ import (
 // arguments forwarded to Codex are deliberately absent.
 type completionSpec struct {
 	accounts bool
+	argument bool
 	noHelp   bool
 	flags    string
 	children map[string]completionSpec
 }
 
 var completionCommands = map[string]completionSpec{
-	"add":        {flags: "--label --device-auth"},
+	"add":        {argument: true, flags: "--label --device-auth"},
 	"rename":     {accounts: true, flags: "--label"},
 	"login":      {accounts: true, flags: "--device-auth"},
 	"list":       {},
@@ -36,6 +37,8 @@ var completionCommands = map[string]completionSpec{
 	"uninstall":  {},
 	"version":    {},
 	"doctor":     {},
+	"export":     {argument: true},
+	"import":     {argument: true, flags: "--skip-existing --apply-auto --dry-run"},
 	"update":     {flags: "--check --yes --repo"},
 	"help":       {},
 	"completion": {children: map[string]completionSpec{"bash": {noHelp: true}, "zsh": {noHelp: true}, "fish": {noHelp: true}}},
@@ -94,7 +97,7 @@ func (a *App) completions(words []string) []string {
 			commands = spec.children
 			continue
 		}
-		if (!spec.accounts && command != "add") || accountSeen {
+		if (!spec.accounts && !spec.argument) || accountSeen {
 			return nil
 		}
 		accountSeen = true
