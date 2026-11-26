@@ -13,6 +13,7 @@ in `.github/` and longer guides in `docs/`.
 | --- | --- |
 | `main.go` | CLI commands, installation, and wrapper restoration |
 | `completion.go` | Shell script generation and offline command/option/account suggestions |
+| `transfer.go` | Allowlisted configuration export, strict validation, and staged import |
 | `doctor.go`, `doctor_unix.go`, `doctor_windows.go` | Read-only, offline installation and manager diagnostics |
 | `storage.go` | Profiles, config, private atomic writes, and file locks |
 | `rpc.go` | Official Codex process execution and app-server quota queries |
